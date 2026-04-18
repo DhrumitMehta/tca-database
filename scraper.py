@@ -2,7 +2,8 @@
 cricclubs_scraper.py
 --------------------
 Scrapes ball-by-ball data from CricClubs and upserts it into Supabase.
-Designed to run on a schedule (cron / GitHub Actions / APScheduler).
+Runs incrementally: queries Supabase for the highest existing match_id,
+then scrapes the next `batch_size` match IDs from there.
 
 Setup:
     pip install selenium beautifulsoup4 pandas supabase python-dotenv
@@ -14,7 +15,6 @@ Environment variables (set in .env or your deployment environment):
 
 import os
 import re
-import ast
 import time
 import logging
 from dotenv import load_dotenv
@@ -44,18 +44,19 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CONFIG — edit these to target different clubs / series
+# CONFIG
 # ══════════════════════════════════════════════════════════════════════════════
 TANZANIA      = 7605
 UGANDA        = 5335
 INTERNATIONAL = 11707
 
-# Series IDs to scrape — set a range (inclusive)
-SERIES_ID_START = 350
-SERIES_ID_END   = 400
-SELECTED_SERIES = list(range(SERIES_ID_START, SERIES_ID_END + 1))
-
 CLUB = TANZANIA
+
+# How many match IDs to attempt per run
+BATCH_SIZE = 100
+
+# Flush to Supabase every N successfully scraped matches
+CHECKPOINT_EVERY = 20
 
 # Supabase table name
 TABLE_NAME = "ball_by_ball"
@@ -96,26 +97,6 @@ def get_page_soup(driver, url: str, wait_for: str = None, timeout: int = 10) -> 
 # ══════════════════════════════════════════════════════════════════════════════
 # SCRAPING
 # ══════════════════════════════════════════════════════════════════════════════
-
-def get_match_ids_for_series(driver, series_id: int, club_id: int) -> list[int]:
-    url = (
-        f"https://www.cricclubs.com/Tanzania/viewLeagueSchedule.do"
-        f"?league={series_id}&clubId={club_id}"
-    )
-    soup = get_page_soup(driver, url, wait_for="div.schedule-all")
-    match_ids = []
-    for tag in soup.find_all("a", href=True):
-        href = tag["href"]
-        if "viewScorecard.do" in href and "matchId=" in href:
-            try:
-                mid = int(href.split("matchId=")[1].split("&")[0])
-                if mid not in match_ids:
-                    match_ids.append(mid)
-            except ValueError:
-                pass
-    log.info(f"  Series {series_id}: found {len(match_ids)} match IDs")
-    return match_ids
-
 
 def scrape_raw_ball_by_ball(driver, match_id: int, club_id: int) -> pd.DataFrame | None:
     url = (
@@ -194,7 +175,6 @@ def get_team_innings_mapping(driver, match_id: int, club_id: int) -> pd.DataFram
         team_names    = [el.find("span", class_="teamName").text.strip() for el in team_elements]
         bowling_team  = [t for t in team_names if t not in batting_teams]
 
-    # Guard: if we still can't resolve bowling_team to the right length, skip
     if len(bowling_team) != len(batting_teams):
         log.warning(
             f"  [SKIP] Innings/team length mismatch for matchId={match_id} "
@@ -211,7 +191,7 @@ def get_team_innings_mapping(driver, match_id: int, club_id: int) -> pd.DataFram
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# CLEANING & TRANSFORMATION  (mirrors notebook logic, no analysis)
+# CLEANING & TRANSFORMATION
 # ══════════════════════════════════════════════════════════════════════════════
 
 def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.DataFrame:
@@ -244,14 +224,13 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
     else:
         new_playing_squad_df = pd.DataFrame(columns=["Match ID", "team", "players", "captain", "full name", "short name"])
 
-    # Build full/short name lists per squad row
     full_names_col, short_names_col = [], []
     for _, row in new_playing_squad_df.iterrows():
         players_list    = row["players"] if isinstance(row["players"], list) else []
         team_full_names, team_short_names = [], []
         for player in players_list:
-            parts     = player.split()
-            full_name = " ".join(parts)
+            parts      = player.split()
+            full_name  = " ".join(parts)
             short_name = f"{parts[0][0]} {parts[-1]}" if len(parts) > 1 else player
             team_full_names.append(full_name)
             team_short_names.append(short_name)
@@ -406,13 +385,13 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
 
     # ── Process WIDE rows ─────────────────────────────────────────────────────
     wide_rows[["ball_outcome", "ball_details"]] = wide_rows["Comments"].str.extract(r"(\d*)\s*(WIDE|WIDES)")
-    wide_rows["extras_runs"]  = wide_rows["ball_outcome"].apply(lambda x: 1 if str(x).strip() == "" else x)
-    wide_rows["extras_type"]  = wide_rows["ball_details"].str.lower() + "s"
-    wide_rows["total_runs"]   = wide_rows["extras_runs"]
-    wide_rows["batter_runs"]  = 0
-    wide_rows["wickets"]      = 0
-    wide_rows["wicket_type"]  = None
-    wide_rows["player_out"]   = None
+    wide_rows["extras_runs"]   = wide_rows["ball_outcome"].apply(lambda x: 1 if str(x).strip() == "" else x)
+    wide_rows["extras_type"]   = wide_rows["ball_details"].str.lower() + "s"
+    wide_rows["total_runs"]    = wide_rows["extras_runs"]
+    wide_rows["batter_runs"]   = 0
+    wide_rows["wickets"]       = 0
+    wide_rows["wicket_type"]   = None
+    wide_rows["player_out"]    = None
     wide_rows["bowler_wicket"] = 0
 
     # ── Process OUT rows ──────────────────────────────────────────────────────
@@ -442,7 +421,6 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
 
     out_rows["wicket_type"] = out_rows["wicket_type"].apply(join_words)
 
-    # ── player_out: check full and short names from full_names_df ────────────
     def check_player_names(comment):
         if not isinstance(comment, str):
             return None
@@ -547,7 +525,6 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
             if bowler_short in bowl_short_list:
                 merged.at[index, "bowler"] = bowl_full_list[bowl_short_list.index(bowler_short)]
 
-            # ── Also resolve player_out to full name ──────────────────────────
             player_out_val = row.get("player_out")
             if pd.notna(player_out_val) and player_out_val:
                 all_short = bat_short_list + bowl_short_list
@@ -570,32 +547,21 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
 # SUPABASE HELPERS
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_already_scraped_match_ids() -> set[int]:
-    """Return set of match_ids already present in Supabase, handling pagination."""
-    all_ids = set()
-    page_size = 10000
-    offset = 0
-
-    while True:
-        result = (
-            supabase.table(TABLE_NAME)
-            .select("match_id")
-            .range(offset, offset + page_size - 1)
-            .execute()
-        )
-        rows = result.data
-        if not rows:
-            break
-
-        # Cast to int explicitly to avoid type mismatch with scraped IDs
-        all_ids.update(int(row["match_id"]) for row in rows)
-
-        if len(rows) < page_size:
-            break  # last page
-        offset += page_size
-
-    log.info(f"Found {len(all_ids)} existing match IDs in Supabase")
-    return all_ids
+def get_last_match_id() -> int:
+    """Return the highest match_id currently in Supabase, or 0 if table is empty."""
+    result = (
+        supabase.table(TABLE_NAME)
+        .select("match_id")
+        .order("match_id", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if result.data:
+        last_id = int(result.data[0]["match_id"])
+        log.info(f"Last match_id in Supabase: {last_id}")
+        return last_id
+    log.info("No existing data in Supabase — starting from match ID 1")
+    return 0
 
 
 def upsert_to_supabase(df: pd.DataFrame) -> None:
@@ -604,20 +570,18 @@ def upsert_to_supabase(df: pd.DataFrame) -> None:
         log.warning("Empty DataFrame — nothing to upsert.")
         return
 
-    # Rename columns to snake_case for Supabase
     rename_map = {
-        "Match ID":      "match_id",
-        "Event Name":    "event_name",
-        "0s":            "dots",
-        "1s":            "ones",
-        "2s":            "twos",
-        "3s":            "threes",
-        "4s":            "fours",
-        "6s":            "sixes",
+        "Match ID":   "match_id",
+        "Event Name": "event_name",
+        "0s":         "dots",
+        "1s":         "ones",
+        "2s":         "twos",
+        "3s":         "threes",
+        "4s":         "fours",
+        "6s":         "sixes",
     }
     df = df.rename(columns=rename_map)
 
-    # Convert NaN → None so Supabase accepts the JSON
     records = df.where(pd.notnull(df), other=None).to_dict(orient="records")
 
     BATCH = 500
@@ -625,6 +589,7 @@ def upsert_to_supabase(df: pd.DataFrame) -> None:
         batch = records[i : i + BATCH]
         upsert_with_retry(batch)
         log.info(f"  Upserted rows {i}–{min(i + BATCH, len(records))}")
+
 
 def upsert_with_retry(batch: list, retries: int = 4, base_backoff: float = 5.0) -> None:
     """Upsert a single batch with exponential backoff on failure."""
@@ -637,33 +602,58 @@ def upsert_with_retry(batch: list, retries: int = 4, base_backoff: float = 5.0) 
             return
         except Exception as e:
             if attempt < retries - 1:
-                wait = base_backoff * (2 ** attempt)  # 5s, 10s, 20s, 40s
+                wait = base_backoff * (2 ** attempt)
                 log.warning(f"  Upsert failed (attempt {attempt + 1}/{retries}): {e}. Retrying in {wait}s …")
                 time.sleep(wait)
             else:
                 log.error(f"  Upsert failed after {retries} attempts. Giving up on this batch.")
                 raise
 
+
+def flush_to_supabase(
+    raw_data: list[pd.DataFrame],
+    innings_data: list[pd.DataFrame],
+    label: str = "flush",
+) -> None:
+    """Clean and upsert a collected batch of raw match data."""
+    if not raw_data:
+        return
+    log.info(f"[{label}] Cleaning and upserting {len(raw_data)} match(es) …")
+    combined_raw     = pd.concat(raw_data,     ignore_index=True)
+    combined_innings = pd.concat(innings_data, ignore_index=True)
+    cleaned = clean_ball_df(combined_raw, combined_innings)
+    dupes = cleaned.duplicated(
+        subset=["Match ID", "inning_number", "over", "delivery", "batter"], keep=False
+    )
+    if dupes.any():
+        log.warning(f"Found {dupes.sum()} duplicate rows — sample:\n{cleaned[dupes].head(10)}")
+    log.info(f"[{label}] Cleaned DataFrame: {len(cleaned)} rows")
+    upsert_to_supabase(cleaned)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # MAIN SCRAPE FUNCTION
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_scraper(
-    series_ids: list[int] = SELECTED_SERIES,
     club_id: int = CLUB,
+    batch_size: int = BATCH_SIZE,
     delay: float = SCRAPE_DELAY,
-    skip_existing: bool = True,
 ) -> None:
-    """Full scrape → clean → upsert pipeline."""
+    """
+    Incremental scrape → clean → upsert pipeline.
 
+    Queries Supabase for the highest existing match_id, then attempts to
+    scrape the next `batch_size` match IDs sequentially.
+    """
     log.info("═" * 60)
-    log.info("Starting CricClubs scraper")
+    log.info("Starting CricClubs scraper (incremental mode)")
     log.info("═" * 60)
 
-    already_scraped: set[int] = set()
-    if skip_existing:
-        already_scraped = get_already_scraped_match_ids()
-        log.info(f"Skipping {len(already_scraped)} already-scraped match IDs")
+    last_id  = get_last_match_id()
+    start_id = last_id + 1
+    end_id   = last_id + batch_size
+    log.info(f"Scraping match IDs {start_id} → {end_id}  (batch_size={batch_size})")
 
     driver = create_driver()
     all_raw_data:     list[pd.DataFrame] = []
@@ -675,87 +665,46 @@ def run_scraper(
         driver.get(f"https://www.cricclubs.com/Tanzania/home.do?clubId={club_id}")
         time.sleep(2)
 
-        # ── Collect match IDs ─────────────────────────────────────────────────
-        all_match_ids: list[int] = []
-        series_for_match: dict[int, int] = {}
-
-        for sid in series_ids:
-            log.info(f"\n[Series {sid}] Fetching match list …")
-            mids = get_match_ids_for_series(driver, sid, club_id)
-            time.sleep(delay)
-            for mid in mids:
-                if mid not in series_for_match:
-                    all_match_ids.append(mid)
-                    series_for_match[mid] = sid
-
-        new_match_ids = [m for m in all_match_ids if m not in already_scraped]
-        log.info(f"\nTotal matches found: {len(all_match_ids)} | New to scrape: {len(new_match_ids)}")
-
-        # ── Scrape each new match ─────────────────────────────────────────────
-        CHECKPOINT_MATCHES = 100
-        CHECKPOINT_SERIES  = 5
-
-        def flush_to_supabase(raw_data, innings_data, label="checkpoint"):
-            if not raw_data:
-                return
-            log.info(f"[{label}] Cleaning and upserting {len(raw_data)} match(es) …")
-            combined_raw     = pd.concat(raw_data,     ignore_index=True)
-            combined_innings = pd.concat(innings_data, ignore_index=True)
-            cleaned = clean_ball_df(combined_raw, combined_innings)
-            dupes = cleaned.duplicated(
-                subset=["Match ID", "inning_number", "over", "delivery", "batter"], keep=False
-            )
-            if dupes.any():
-                log.warning(f"Found {dupes.sum()} duplicate rows — sample:\n{cleaned[dupes].head(10)}")
-            log.info(f"[{label}] Cleaned DataFrame: {len(cleaned)} rows")
-            upsert_to_supabase(cleaned)
-
-        current_series_in_batch = set()
-
-        for match_id in new_match_ids:
-            sid = series_for_match[match_id]
-
+        for match_id in range(start_id, end_id + 1):
             raw     = scrape_raw_ball_by_ball(driver, match_id, club_id)
             time.sleep(delay)
             innings = get_team_innings_mapping(driver, match_id, club_id)
             time.sleep(delay)
 
-            # AFTER:
             if raw is None or innings is None:
-                log.warning(f"  [SKIP] matchId={match_id} (series {sid}) — no ball-by-ball data")
+                log.warning(f"  [SKIP] matchId={match_id} — no data found")
                 failed_ids.append(match_id)
             else:
-                raw["Series ID"] = sid
                 all_raw_data.append(raw)
                 all_innings_data.append(innings)
                 success_ids.append(match_id)
-                current_series_in_batch.add(sid)
-                log.info(f"  [OK]  matchId={match_id} (series {sid}) — {len(raw)} balls")
+                log.info(f"  [OK]  matchId={match_id} — {len(raw)} balls")
 
-            # ── Checkpoint: flush if we've hit the match or series threshold ──
-            matches_since_flush = len(all_raw_data)
-            series_since_flush  = len(current_series_in_batch)
-
-            if matches_since_flush >= CHECKPOINT_MATCHES or series_since_flush >= CHECKPOINT_SERIES:
-                flush_to_supabase(all_raw_data, all_innings_data, label=f"checkpoint after {matches_since_flush} matches")
+            # ── Checkpoint flush ──────────────────────────────────────────────
+            if len(all_raw_data) >= CHECKPOINT_EVERY:
+                flush_to_supabase(
+                    all_raw_data,
+                    all_innings_data,
+                    label=f"checkpoint at matchId={match_id}",
+                )
                 all_raw_data.clear()
                 all_innings_data.clear()
-                current_series_in_batch.clear()
 
     finally:
         driver.quit()
 
-    log.info(f"\nScraped: {len(success_ids)} succeeded | {len(failed_ids)} failed")
+    log.info(f"\nScraped: {len(success_ids)} succeeded | {len(failed_ids)} skipped/failed")
     if failed_ids:
-        log.warning(f"Failed IDs: {failed_ids}")
+        log.warning(f"Skipped IDs (no data or mismatch): {failed_ids}")
 
     # ── Final flush for any remaining data ────────────────────────────────────
     if all_raw_data:
         flush_to_supabase(all_raw_data, all_innings_data, label="final flush")
     else:
-        log.info("No remaining data to process.")
+        log.info("No remaining data to flush.")
 
     log.info("Done ✓")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ENTRY POINT
