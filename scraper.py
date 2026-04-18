@@ -296,11 +296,11 @@ def clean_ball_df(ball_df: pd.DataFrame, team_innings_df: pd.DataFrame) -> pd.Da
         match_df      = df[df["Match ID"] == match_id]
         prev_over     = None
         for _, row in match_df.iterrows():
-            if prev_over is not None and row["over"] < prev_over:
+            if prev_over is not None and int(row["over"]) < int(prev_over):
                 inning_number += 1
             inning_numbers.append(inning_number)
-            prev_over = row["over"]
-    df["inning_number"] = [int(x) for x in inning_numbers]
+            prev_over = int(row["over"])   # <-- cast to int to avoid string comparison bugs
+    df["inning_number"] = inning_numbers
 
     # ── Merge team / innings mapping ──────────────────────────────────────────
     team_innings_df["inning_number"] = team_innings_df["inning_number"].astype(int)
@@ -565,7 +565,6 @@ def get_last_match_id() -> int:
 
 
 def upsert_to_supabase(df: pd.DataFrame) -> None:
-    """Upsert a cleaned DataFrame into the Supabase ball_by_ball table."""
     if df.empty:
         log.warning("Empty DataFrame — nothing to upsert.")
         return
@@ -582,7 +581,17 @@ def upsert_to_supabase(df: pd.DataFrame) -> None:
     }
     df = df.rename(columns=rename_map)
 
+    # Replace inf/-inf with NaN first, then NaN with None
+    df = df.replace([float("inf"), float("-inf")], pd.NA)
     records = df.where(pd.notnull(df), other=None).to_dict(orient="records")
+
+    # Sanitise any remaining non-finite floats at the record level
+    def sanitise(val):
+        if isinstance(val, float) and (val != val or val in (float("inf"), float("-inf"))):
+            return None
+        return val
+
+    records = [{k: sanitise(v) for k, v in rec.items()} for rec in records]
 
     BATCH = 500
     for i in range(0, len(records), BATCH):
