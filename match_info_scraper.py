@@ -89,7 +89,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 CLUB_ID   = 7605
 CLUB_SLUG = "Tanzania"
 
-BATCH_SIZE       = 1000  # match IDs to attempt per run
+BATCH_SIZE       = 100  # match IDs to attempt per run
 CHECKPOINT_EVERY = 20    # flush to Supabase every N successful matches
 SCRAPE_DELAY     = 1.5   # seconds between requests
 
@@ -121,17 +121,32 @@ def create_driver() -> webdriver.Chrome:
     return driver
 
 
-def get_soup(driver, url: str, wait_css: str = None, timeout: int = 15) -> BeautifulSoup:
-    driver.get(url)
-    if wait_css:
+def get_soup(driver, url: str, wait_css: str = None, timeout: int = 15,
+             retries: int = 3, retry_delay: float = 15.0) -> BeautifulSoup:
+    from selenium.common.exceptions import WebDriverException
+    for attempt in range(retries):
         try:
-            WebDriverWait(driver, timeout).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, wait_css))
-            )
-        except Exception:
-            pass
-    time.sleep(1.5)
-    return BeautifulSoup(driver.page_source, "html.parser")
+            driver.get(url)
+            if wait_css:
+                try:
+                    WebDriverWait(driver, timeout).until(
+                        EC.presence_of_element_located((By.CSS_SELECTOR, wait_css))
+                    )
+                except Exception:
+                    pass
+            time.sleep(1.5)
+            return BeautifulSoup(driver.page_source, "html.parser")
+        except WebDriverException as e:
+            if "ERR_INTERNET_DISCONNECTED" in str(e) or "ERR_CONNECTION" in str(e):
+                if attempt < retries - 1:
+                    log.warning(f"  [NET] Network error on attempt {attempt+1}/{retries} for {url}. "
+                                f"Retrying in {retry_delay}s…")
+                    time.sleep(retry_delay)
+                else:
+                    log.error(f"  [NET] Network error after {retries} attempts. Giving up.")
+                    raise
+            else:
+                raise
 
 
 # ══════════════════════════════════════════════════════════════════════════════
