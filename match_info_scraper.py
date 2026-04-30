@@ -89,7 +89,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 CLUB_ID   = 7605
 CLUB_SLUG = "Tanzania"
 
-BATCH_SIZE       = 100  # match IDs to attempt per run
+BATCH_SIZE       = 10  # match IDs to attempt per run
 CHECKPOINT_EVERY = 20    # flush to Supabase every N successful matches
 SCRAPE_DELAY     = 1.5   # seconds between requests
 
@@ -326,17 +326,22 @@ def scrape_match_info(driver, match_id: int) -> dict | None:
             record["player_of_match_name"] = link.get_text(strip=True) or None
 
     # ── Umpires ───────────────────────────────────────────────────────────────
-    if "Umpires" in row_map:
-        umpire_links = row_map["Umpires"].find_all("a", href=True)
-        for i, ul in enumerate(umpire_links[:2]):
-            uid = _umpire_id_from_href(ul["href"])
-            name = ul.get_text(strip=True) or None
-            if i == 0:
-                record["umpire_1_id"]   = uid
-                record["umpire_1_name"] = name
-            else:
-                record["umpire_2_id"]   = uid
-                record["umpire_2_name"] = name
+    # Umpires row uses nested tables, so we search the full info_table for
+    # any <th> whose text contains "Umpires" and then grab links from that row
+    for row in info_table.find_all("tr"):
+        row_text = row.get_text()
+        if "Umpires" in row_text:
+            umpire_links = row.find_all("a", href=True)
+            for i, ul in enumerate(umpire_links[:2]):
+                uid = _umpire_id_from_href(ul["href"])
+                name = ul.get_text(strip=True) or None
+                if i == 0:
+                    record["umpire_1_id"]   = uid
+                    record["umpire_1_name"] = name
+                else:
+                    record["umpire_2_id"]   = uid
+                    record["umpire_2_name"] = name
+            break
 
     # ── Location ──────────────────────────────────────────────────────────────
     if "Location" in row_map:
