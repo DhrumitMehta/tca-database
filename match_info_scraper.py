@@ -89,7 +89,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 CLUB_ID   = 7605
 CLUB_SLUG = "Tanzania"
 
-BATCH_SIZE       = 10  # match IDs to attempt per run
+BATCH_SIZE       = 100  # match IDs to attempt per run
 CHECKPOINT_EVERY = 20    # flush to Supabase every N successful matches
 SCRAPE_DELAY     = 1.5   # seconds between requests
 
