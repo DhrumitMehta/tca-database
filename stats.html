@@ -449,9 +449,9 @@
         <div class="filter-group" style="grid-column: span 2">
           <label>Date Range</label>
           <div class="date-range">
-            <input type="date" id="filterDateFrom" onchange="loadData()">
+            <input type="date" id="filterDateFrom" onchange="filterAndRender()">
             <span class="date-sep">to</span>
-            <input type="date" id="filterDateTo" onchange="loadData()">
+            <input type="date" id="filterDateTo" onchange="filterAndRender()">
           </div>
         </div>
 
@@ -579,7 +579,7 @@
       <div class="filter-actions">
         <div class="active-filters" id="activeFilterChips"></div>
         <button class="btn btn-ghost btn-sm" onclick="resetAllFilters()">✕ Reset All</button>
-        <button class="btn btn-primary btn-sm" onclick="loadData()">Apply Filters</button>
+        <button class="btn btn-primary btn-sm" onclick="filterAndRender()">Apply Filters</button>
       </div>
     </div>
   </div>
@@ -649,6 +649,8 @@ let currentSort = { col: null, dir: 'desc' };
 let currentPage = 1;
 const PAGE_SIZE = 25;
 let selectedPlayerIds = new Set();
+// Cache of raw scorecard rows per tab — fetched once, filtered in-memory on filter changes
+const rawDataCache = { batting: null, bowling: null };
 
 // Multi-select state: key → Set of selected values
 const multiSelectState = {
@@ -684,7 +686,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (SUPABASE_URL && SUPABASE_KEY &&
       !SUPABASE_URL.includes('%%') && !SUPABASE_KEY.includes('%%')) {
-    loadReferenceData().then(() => loadData());
+    loadReferenceData().then(() => loadData(true));
   }
 
   // Close dropdowns on outside click
@@ -770,7 +772,8 @@ function selectAllMultiSelect(key) {
 function applyMultiSelect(key) {
   closeAllMultiSelects();
   updateActiveChips();
-  renderTable();
+  // Re-filter cached data — no Supabase fetch needed
+  filterAndRender();
 }
 
 function updateMultiSelectTrigger(key) {
@@ -812,8 +815,8 @@ function updateActiveChips() {
 
   const from = document.getElementById('filterDateFrom').value;
   const to   = document.getElementById('filterDateTo').value;
-  if (from) chips.push(`<span class="filter-chip">From: ${from} <span class="remove" onclick="document.getElementById('filterDateFrom').value='';updateActiveChips();loadData()">✕</span></span>`);
-  if (to)   chips.push(`<span class="filter-chip">To: ${to} <span class="remove" onclick="document.getElementById('filterDateTo').value='';updateActiveChips();loadData()">✕</span></span>`);
+  if (from) chips.push(`<span class="filter-chip">From: ${from} <span class="remove" onclick="document.getElementById('filterDateFrom').value='';filterAndRender()">✕</span></span>`);
+  if (to)   chips.push(`<span class="filter-chip">To: ${to} <span class="remove" onclick="document.getElementById('filterDateTo').value='';filterAndRender()">✕</span></span>`);
 
   chipContainer.innerHTML = chips.join('');
 
@@ -828,7 +831,7 @@ function removeChip(key, value) {
   renderMultiSelectList(key, multiSelectOptions[key]);
   updateMultiSelectTrigger(key);
   updateActiveChips();
-  renderTable();
+  filterAndRender();
 }
 
 function resetAllFilters() {
@@ -836,8 +839,7 @@ function resetAllFilters() {
   document.getElementById('filterDateFrom').value = '';
   document.getElementById('filterDateTo').value = '';
   document.getElementById('searchInput').value = '';
-  updateActiveChips();
-  loadData();
+  filterAndRender();
 }
 
 // ─── CONFIG ───────────────────────────────────────────────
@@ -857,8 +859,10 @@ async function saveConfig() {
   localStorage.setItem('tca_url', url);
   localStorage.setItem('tca_key', key);
   closeConfig();
+  rawDataCache.batting = null;
+  rawDataCache.bowling = null;
   await loadReferenceData();
-  await loadData();
+  await loadData(true);
 }
 
 function showCfgError(msg) { const el = document.getElementById('cfgError'); el.textContent = msg; el.style.display = 'block'; }
@@ -946,69 +950,91 @@ function buildFilterOptionsFromReference() {
   buildMultiSelectList('venue', venues);
 }
 
+// ─── FILTER AND RENDER (no re-fetch) ─────────────────────
+function filterAndRender() {
+  if (!rawDataCache[currentTab]) { loadData(true); return; }
+  updateActiveChips();
+  applyFilters();
+  if (currentTab === 'batting') processBatting();
+  else processBowling();
+}
+
+// ─── FILTER HELPER — applies all active filters against cached raw rows ──
+function applyFilters() {
+  const raw = rawDataCache[currentTab];
+  if (!raw) return;
+
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  const selVenues      = multiSelectState.venue;
+  const selFormats     = multiSelectState.format;
+  const selTournaments = multiSelectState.tournament;
+  const selCategories  = multiSelectState.category;
+  const selBallTypes   = multiSelectState.ballType;
+
+  const hasSeriesFilter = selCategories.size > 0 || selBallTypes.size > 0 ||
+                          selFormats.size > 0 || selTournaments.size > 0;
+  const hasMatchFilter  = dateFrom || dateTo || selVenues.size > 0;
+
+  // Build valid series name set from seriesInfoMap
+  let validSeriesNames = null;
+  if (hasSeriesFilter) {
+    validSeriesNames = new Set();
+    Object.entries(seriesInfoMap).forEach(([name, info]) => {
+      if (selTournaments.size > 0 && !selTournaments.has(name)) return;
+      if (selCategories.size > 0 && !selCategories.has(info.category)) return;
+      if (selBallTypes.size > 0 && !selBallTypes.has(info.ball_type)) return;
+      if (selFormats.size > 0 && !selFormats.has(info.format_label)) return;
+      validSeriesNames.add(name);
+    });
+  }
+
+  // Build valid match_id set from matchInfoMap
+  let validMatchIds = null;
+  if (hasMatchFilter) {
+    validMatchIds = new Set();
+    Object.entries(matchInfoMap).forEach(([matchId, info]) => {
+      if (dateFrom && info.match_date < dateFrom) return;
+      if (dateTo   && info.match_date > dateTo)   return;
+      if (selVenues.size > 0 && !selVenues.has(info.venue)) return;
+      validMatchIds.add(matchId);
+    });
+  }
+
+  allData = raw.filter(r => {
+    if (validMatchIds    && !validMatchIds.has(r.match_id))      return false;
+    if (validSeriesNames && !validSeriesNames.has(r.event_name)) return false;
+    return true;
+  });
+}
+
 // ─── LOAD DATA ────────────────────────────────────────────
-async function loadData() {
+// forceFetch=true  → re-download from Supabase (tab switch, first connect)
+// forceFetch=false → re-filter cached data only (any filter change)
+async function loadData(forceFetch = false) {
   if (!SUPABASE_URL || !SUPABASE_KEY ||
       SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
 
-  showLoading();
-  setConnStatus('loading');
   updateActiveChips();
   selectedPlayerIds.clear();
   updateSelectionBar();
 
   try {
-    // Build match_id filter set
-    const dateFrom = document.getElementById('filterDateFrom').value;
-    const dateTo   = document.getElementById('filterDateTo').value;
-    const selVenues   = multiSelectState.venue;
-    const selFormats  = multiSelectState.format;
-    const selTournaments = multiSelectState.tournament;
-    const selCategories  = multiSelectState.category;
-    const selBallTypes   = multiSelectState.ballType;
-
-    // Get valid series names considering category/ball_type/format filters
-    let validSeriesNames = null;
-    if (selCategories.size > 0 || selBallTypes.size > 0 || selFormats.size > 0 || selTournaments.size > 0) {
-      validSeriesNames = new Set();
-      Object.entries(seriesInfoMap).forEach(([name, info]) => {
-        if (selTournaments.size > 0 && !selTournaments.has(name)) return;
-        if (selCategories.size > 0 && !selCategories.has(info.category)) return;
-        if (selBallTypes.size > 0 && !selBallTypes.has(info.ball_type)) return;
-        if (selFormats.size > 0 && !selFormats.has(info.format_label)) return;
-        validSeriesNames.add(name);
+    if (forceFetch || !rawDataCache[currentTab]) {
+      // Need to fetch from Supabase
+      const table = currentTab === 'batting'
+        ? 'tca_db_scorecard_batting'
+        : 'tca_db_scorecard_bowling';
+      showLoading();
+      setConnStatus('loading');
+      const data = await queryAll(table, 'select=*', (count, total) => {
+        updateLoadingProgress(count, total);
       });
+      rawDataCache[currentTab] = data;
+      setConnStatus('connected');
     }
 
-    // Get valid match_ids from match_info (date + venue filters)
-    let validMatchIds = null;
-    if (dateFrom || dateTo || selVenues.size > 0) {
-      validMatchIds = new Set();
-      Object.entries(matchInfoMap).forEach(([matchId, info]) => {
-        if (dateFrom && info.match_date < dateFrom) return;
-        if (dateTo   && info.match_date > dateTo)   return;
-        if (selVenues.size > 0 && !selVenues.has(info.venue)) return;
-        validMatchIds.add(matchId);
-      });
-    }
-
-    // Fetch scorecard rows
-    const table = currentTab === 'batting'
-      ? 'tca_db_scorecard_batting'
-      : 'tca_db_scorecard_bowling';
-
-    const data = await queryAll(table, 'select=*', (count, total) => {
-      updateLoadingProgress(count, total);
-    });
-
-    // In-memory filter
-    allData = data.filter(r => {
-      if (validMatchIds && !validMatchIds.has(r.match_id)) return false;
-      if (validSeriesNames && !validSeriesNames.has(r.event_name)) return false;
-      return true;
-    });
-
-    setConnStatus('connected');
+    applyFilters();
 
     if (currentTab === 'batting') processBatting();
     else processBowling();
@@ -1346,7 +1372,7 @@ function switchTab(tab) {
   window._processedData = null;
   selectedPlayerIds.clear();
   updateSelectionBar();
-  loadData();
+  loadData(true); // force fetch — different table
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────
