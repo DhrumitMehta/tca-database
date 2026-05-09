@@ -688,6 +688,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.addEventListener('click', e => {
     if (!e.target.closest('.multi-select-wrapper')) closeAllMultiSelects();
   });
+
+  // Single delegated change listener for ALL multi-select checkboxes
+  document.addEventListener('change', e => {
+    const cb = e.target;
+    if (cb.type !== 'checkbox' || !cb.dataset.key) return;
+    const key = cb.dataset.key;
+    const idx = parseInt(cb.dataset.idx);
+    const listId = `ms${capitalize(key)}List`;
+    const allOpts = msOptsMap[listId];
+    if (!allOpts || idx < 0 || idx >= allOpts.length) return;
+    const value = allOpts[idx];
+    if (cb.checked) multiSelectState[key].add(value);
+    else multiSelectState[key].delete(value);
+    const label = cb.closest('label');
+    if (label) label.classList.toggle('selected', cb.checked);
+    updateMultiSelectTrigger(key);
+  });
 });
 
 // ─── FILTER PANEL TOGGLE ────────────────────────────────
@@ -721,35 +738,38 @@ function closeAllMultiSelects() {
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+// msOptsMap: listElementId → full options array, used by the delegated change listener
+const msOptsMap = {};
+
 function buildMultiSelectList(key, options) {
   multiSelectOptions[key] = options;
-  renderMultiSelectList(key, options);
+  _renderMSItems(key, options);
 }
 
 function renderMultiSelectList(key, options) {
+  _renderMSItems(key, options);
+}
+
+// Core render — always uses multiSelectOptions[key] as the source of truth for indices
+function _renderMSItems(key, visibleOptions) {
+  const allOpts = multiSelectOptions[key] || visibleOptions;
   const list = document.getElementById(`ms${capitalize(key)}List`);
   if (!list) return;
   const selected = multiSelectState[key];
-  list.innerHTML = options.map(opt => `
-    <label class="multi-select-item ${selected.has(opt) ? 'selected' : ''}">
-      <input type="checkbox" ${selected.has(opt) ? 'checked' : ''}
-        onchange="toggleMultiSelectItem('${key}', ${JSON.stringify(opt)}, this.checked)">
-      ${opt}
-    </label>
-  `).join('');
+  msOptsMap[list.id] = allOpts; // store for change handler lookup
+  list.innerHTML = visibleOptions.map(opt => {
+    const idx = allOpts.indexOf(opt);
+    const esc = opt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    const chk = selected.has(opt) ? 'checked' : '';
+    return `<label class="multi-select-item ${chk ? 'selected' : ''}"><input type="checkbox" ${chk} data-key="${key}" data-idx="${idx}">${esc}</label>`;
+  }).join('');
 }
 
 function filterMultiSelectList(key, search) {
-  const filtered = multiSelectOptions[key].filter(o =>
-    o.toLowerCase().includes(search.toLowerCase())
-  );
-  renderMultiSelectList(key, filtered);
-}
-
-function toggleMultiSelectItem(key, value, checked) {
-  if (checked) multiSelectState[key].add(value);
-  else multiSelectState[key].delete(value);
-  updateMultiSelectTrigger(key);
+  const allOpts = multiSelectOptions[key];
+  const lower = search.toLowerCase();
+  const visible = lower ? allOpts.filter(o => o.toLowerCase().includes(lower)) : allOpts;
+  _renderMSItems(key, visible);
 }
 
 function clearMultiSelect(key) {
