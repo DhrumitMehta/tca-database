@@ -677,12 +677,7 @@ let filtersCollapsed = false;
 
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Default date range: last 2 years
-  const today = new Date();
-  const twoYearsAgo = new Date();
-  twoYearsAgo.setFullYear(today.getFullYear() - 2);
-  document.getElementById('filterDateTo').value = today.toISOString().split('T')[0];
-  document.getElementById('filterDateFrom').value = twoYearsAgo.toISOString().split('T')[0];
+  // No default date range — leave blank so all data shows by default
 
   if (SUPABASE_URL && SUPABASE_KEY &&
       !SUPABASE_URL.includes('%%') && !SUPABASE_KEY.includes('%%')) {
@@ -913,7 +908,11 @@ async function loadReferenceData() {
     const matchRows = await queryAll('tca_db_match_info', 'select=match_id,match_date,venue');
     matchInfoMap = {};
     matchRows.forEach(r => {
-      matchInfoMap[r.match_id] = { match_date: r.match_date, venue: r.venue || '' };
+      // Normalise key to string so Set.has() works regardless of int vs string from Supabase
+      matchInfoMap[String(r.match_id)] = {
+        match_date: r.match_date ? r.match_date.slice(0, 10) : '', // ensure YYYY-MM-DD
+        venue: r.venue || ''
+      };
     });
 
     // Build filter options from reference data
@@ -954,6 +953,8 @@ function buildFilterOptionsFromReference() {
 function filterAndRender() {
   if (!rawDataCache[currentTab]) { loadData(true); return; }
   updateActiveChips();
+  selectedPlayerIds.clear();
+  updateSelectionBar();
   applyFilters();
   if (currentTab === 'batting') processBatting();
   else processBowling();
@@ -997,14 +998,21 @@ function applyFilters() {
       if (dateFrom && info.match_date < dateFrom) return;
       if (dateTo   && info.match_date > dateTo)   return;
       if (selVenues.size > 0 && !selVenues.has(info.venue)) return;
-      validMatchIds.add(matchId);
+      validMatchIds.add(matchId); // already stored as string
     });
   }
 
   allData = raw.filter(r => {
-    if (validMatchIds    && !validMatchIds.has(r.match_id))      return false;
-    if (validSeriesNames && !validSeriesNames.has(r.event_name)) return false;
+    if (validMatchIds    && !validMatchIds.has(String(r.match_id))) return false;
+    if (validSeriesNames && !validSeriesNames.has(r.event_name))    return false;
     return true;
+  });
+  console.debug('[TCA] applyFilters →', {
+    rawRows: raw.length,
+    filtered: allData.length,
+    validMatchIds: validMatchIds ? validMatchIds.size : 'n/a',
+    validSeriesNames: validSeriesNames ? validSeriesNames.size : 'n/a',
+    dateFrom, dateTo,
   });
 }
 
