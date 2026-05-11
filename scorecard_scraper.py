@@ -172,9 +172,17 @@ def _safe_float(val, default=None):
 
 
 def detect_match_format(team_info_texts: list[str]) -> str | None:
-    """Detect T10 / T20 / T30 / T40 / T50 from the team info paragraph text."""
+    """
+    Detect T10 / T20 / T30 / T40 / T50 from the team info paragraph text.
+
+    Changed from the original: uses `any` instead of `all` so that abandoned
+    matches — where only one team's info paragraph is rendered — can still be
+    identified.  Falls back to scanning individual overs strings as before.
+    """
     for fmt in ["10", "20", "30", "40", "50"]:
-        if all(fmt in t for t in team_info_texts):
+        # FIX: was `all(fmt in t for t in ...)` — too strict for 1-inning games.
+        # `any` means a single team's paragraph mentioning the over count is enough.
+        if any(fmt in t for t in team_info_texts):
             return f"T{fmt}"
     for text in team_info_texts:
         m = re.findall(r"(\d+)(?:\.\d+)?(?:/\d+(?:\.\d+)?)?\s*ov", text)
@@ -280,6 +288,10 @@ def scrape_scorecard(
 
     Returns (batting_rows, bowling_rows) — both lists of dicts ready for
     Supabase upsert — or (None, None) if the page has no usable data.
+
+    Handles rain-abandoned / single-inning matches: the team-section guard
+    and format detection have been relaxed so that a match with only one
+    completed innings is still saved rather than silently skipped.
     """
     # ── Step 1: match info page (format + team names) ────────────────────────
     info_url = (
@@ -292,10 +304,12 @@ def scrape_scorecard(
         log.warning(f"  [SKIP] Sparse info page for matchId={match_id}")
         return None, None
 
-    # Collect team names and format
+    # Collect team names and format.
+    # FIX: guard changed from < 2 to < 1 — abandoned matches may only render
+    # one team section (the team that batted), so we no longer require both.
     team_sections = info_soup.find_all("li", class_=["win", "lose"])
-    if len(team_sections) < 2:
-        log.warning(f"  [SKIP] <2 team sections for matchId={match_id}")
+    if len(team_sections) < 1:
+        log.warning(f"  [SKIP] No team sections found for matchId={match_id}")
         return None, None
 
     team_names: list[str] = []
@@ -308,10 +322,17 @@ def scrape_scorecard(
         if p:
             team_info_texts.append(p.get_text(strip=True))
 
-    match_format = detect_match_format(team_info_texts) if len(team_info_texts) == 2 else None
+    # FIX: require at least one info text, not necessarily two.
+    match_format = detect_match_format(team_info_texts) if len(team_info_texts) >= 1 else None
     if not match_format:
-        log.warning(f"  [SKIP] Could not detect format for matchId={match_id}")
-        return None, None
+        # FIX: was a hard `return None, None` — now we fall back to "Unknown"
+        # so that the scorecard data is still saved even if the over-count
+        # cannot be inferred from the info page (common in abandoned matches).
+        log.warning(
+            f"  [WARN] Could not detect format for matchId={match_id} "
+            f"— storing match_format as 'Unknown'"
+        )
+        match_format = "Unknown"
 
     # ── Step 2: scorecard page ───────────────────────────────────────────────
     sc_url = (
@@ -335,26 +356,46 @@ def scrape_scorecard(
                     winning_team = sp.get_text(strip=True)
                 break
 
-    # Team order: innings 1 bats first, innings 2 bats second
-    # The scorecard divs are ballByBallTeam1, ballByBallTeam2
+    # Team order: innings 1 bats first, innings 2 bats second.
+    # The scorecard divs are ballByBallTeam1, ballByBallTeam2.
     batting_order: list[str] = []
     for li in sc_soup.find_all("li", id=lambda x: x and x.startswith("ballByBallTeamTab")):
         a = li.find("a")
         if a:
             batting_order.append(a.get_text(strip=True))
 
-    # Fallback: use team_names order
+    # FIX: fallback now pads to two entries with "Unknown" so that the
+    # bowling_team lookup (batting_order[2 - inning_number]) doesn't IndexError
+    # when only one team batted.
     if len(batting_order) < 2:
-        batting_order = team_names[:2] if len(team_names) >= 2 else ["Team1", "Team2"]
+        if len(team_names) >= 2:
+            batting_order = team_names[:2]
+        elif len(team_names) == 1:
+            batting_order = [team_names[0], "Unknown"]
+        else:
+            batting_order = ["Team1", "Team2"]
 
     batting_rows: list[dict] = []
     bowling_rows: list[dict] = []
 
-    for inning_number in range(1, 3):
+    # Detect how many inning sections actually exist on the page before looping.
+    innings_present = [
+        i for i in range(1, 3)
+        if sc_soup.find("div", id=f"ballByBallTeam{i}") is not None
+    ]
+
+    if not innings_present:
+        log.warning(f"  [SKIP] No ballByBallTeam sections found for matchId={match_id}")
+        return None, None
+
+    if len(innings_present) == 1:
+        log.info(f"  [INFO] Single-inning match detected for matchId={match_id} (abandoned/rain?)")
+
+    for inning_number in innings_present:
         div_id = f"ballByBallTeam{inning_number}"
         section = sc_soup.find("div", id=div_id)
+        # Already confirmed to exist above, but guard anyway.
         if not section:
-            log.info(f"    No section {div_id} for matchId={match_id}")
             continue
 
         batting_team = batting_order[inning_number - 1] if inning_number - 1 < len(batting_order) else ""
@@ -489,6 +530,7 @@ def scrape_scorecard(
 
     log.info(
         f"  [OK]  matchId={match_id} — "
+        f"{len(innings_present)} inning(s) — "
         f"{len(batting_rows)} batting rows, {len(bowling_rows)} bowling rows"
     )
     return batting_rows, bowling_rows

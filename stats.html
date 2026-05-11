@@ -329,6 +329,12 @@
   thead th.sorted .sort-icon { opacity: 1; }
   thead th.no-sort { cursor: default; }
 
+  /* Column group separators for all-rounder table */
+  thead th.col-sep { border-left: 2px solid var(--border); }
+  thead th.col-group-bat { background: rgba(232,255,71,0.06); }
+  thead th.col-group-bowl { background: rgba(71,200,255,0.06); }
+  thead th.col-group-field { background: rgba(74,222,128,0.06); }
+
   tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
   tbody tr:last-child { border-bottom: none; }
   tbody tr:hover { background: var(--surface2); }
@@ -337,9 +343,15 @@
   tbody td { padding: 10px 14px; font-size: 0.875rem; font-family: 'DM Mono', monospace; white-space: nowrap; }
   tbody td:first-child { font-family: 'DM Sans', sans-serif; }
   tbody td.player-cell { font-family: 'DM Sans', sans-serif; font-weight: 500; }
+  tbody td.col-sep { border-left: 2px solid var(--border); }
+  tbody td.col-group-bat { background: rgba(232,255,71,0.02); }
+  tbody td.col-group-bowl { background: rgba(71,200,255,0.02); }
+  tbody td.col-group-field { background: rgba(74,222,128,0.02); }
 
   .rank { font-size: 0.75rem; color: var(--muted); width: 30px; display: inline-block; }
   .highlight { color: var(--accent); font-weight: 500; }
+  .highlight-blue { color: var(--accent2); font-weight: 500; }
+  .highlight-green { color: #4ade80; font-weight: 500; }
   .good { color: #4ade80; }
   .bad { color: var(--red); }
 
@@ -380,6 +392,30 @@
   .form-group input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; font-family: 'DM Mono', monospace; outline: none; }
   .form-group input:focus { border-color: var(--accent); }
   .modal-actions { display: flex; gap: 8px; margin-top: 1.5rem; justify-content: flex-end; }
+
+  /* ALL-ROUNDER COLUMN LEGEND */
+  .col-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 1.25rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .col-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--muted2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .col-legend-dot {
+    width: 10px; height: 10px; border-radius: 2px;
+  }
+  .col-legend-dot.bat  { background: rgba(232,255,71,0.4); }
+  .col-legend-dot.bowl { background: rgba(71,200,255,0.4); }
+  .col-legend-dot.field{ background: rgba(74,222,128,0.4); }
 
   /* CONN STATUS */
   .conn-status { font-size: 0.75rem; display: flex; align-items: center; gap: 6px; color: var(--muted2); }
@@ -431,6 +467,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('batting')">🏏 Batting</button>
     <button class="tab" onclick="switchTab('bowling')">⚡ Bowling</button>
+    <button class="tab" onclick="switchTab('allround')">⭐ All-Round</button>
   </div>
 
   <!-- FILTER PANEL -->
@@ -475,7 +512,7 @@
           </div>
         </div>
 
-        <!-- CATEGORY (from series_info) -->
+        <!-- CATEGORY -->
         <div class="filter-group">
           <label>Category</label>
           <div class="multi-select-wrapper" id="msCategoryWrapper">
@@ -495,7 +532,7 @@
           </div>
         </div>
 
-        <!-- BALL TYPE (from series_info) -->
+        <!-- BALL TYPE -->
         <div class="filter-group">
           <label>Ball Type</label>
           <div class="multi-select-wrapper" id="msBallTypeWrapper">
@@ -514,7 +551,7 @@
           </div>
         </div>
 
-        <!-- FORMAT (from series_info max_overs) -->
+        <!-- FORMAT -->
         <div class="filter-group">
           <label>Format</label>
           <div class="multi-select-wrapper" id="msFormatWrapper">
@@ -533,7 +570,7 @@
           </div>
         </div>
 
-        <!-- VENUE (from match_info) -->
+        <!-- VENUE -->
         <div class="filter-group">
           <label>Venue</label>
           <div class="multi-select-wrapper" id="msVenueWrapper">
@@ -553,7 +590,7 @@
           </div>
         </div>
 
-        <!-- MIN INNINGS / MIN OVERS -->
+        <!-- MIN INNINGS / MIN OVERS / MIN MATCHES -->
         <div class="filter-group" id="batMinGroup">
           <label>Min Innings</label>
           <select id="filterMinInnings" onchange="renderTable()">
@@ -571,6 +608,15 @@
             <option value="5" selected>5+</option>
             <option value="10">10+</option>
             <option value="20">20+</option>
+          </select>
+        </div>
+
+        <div class="filter-group" id="allroundMinGroup" style="display:none">
+          <label>Min Innings (Bat)</label>
+          <select id="filterArMinInnings" onchange="renderTable()">
+            <option value="1">1+</option>
+            <option value="3" selected>3+</option>
+            <option value="5">5+</option>
           </select>
         </div>
       </div>
@@ -599,6 +645,13 @@
         <button class="btn btn-secondary btn-sm" onclick="exportCSV(false)">⬇ Export All</button>
         <button class="btn btn-primary btn-sm" id="exportSelectedBtn" onclick="exportCSV(true)" style="display:none">⬇ Export Selected</button>
       </div>
+    </div>
+
+    <!-- COLUMN LEGEND (all-rounder only) -->
+    <div class="col-legend" id="colLegend" style="display:none">
+      <span class="col-legend-item"><span class="col-legend-dot bat"></span> Batting</span>
+      <span class="col-legend-item"><span class="col-legend-dot bowl"></span> Bowling</span>
+      <span class="col-legend-item"><span class="col-legend-dot field"></span> Fielding</span>
     </div>
 
     <!-- SELECTION TOOLBAR -->
@@ -644,15 +697,16 @@
 let SUPABASE_URL = localStorage.getItem('tca_url') || '%%SUPABASE_URL%%';
 let SUPABASE_KEY = localStorage.getItem('tca_key') || '%%SUPABASE_ANON_KEY%%';
 let currentTab = 'batting';
-let allData = [];
+let allData = {};   // keyed by tab: { batting: [], bowling: [], fielding: [] }
 let currentSort = { col: null, dir: 'desc' };
 let currentPage = 1;
 const PAGE_SIZE = 25;
 let selectedPlayerIds = new Set();
-// Cache of raw scorecard rows per tab — fetched once, filtered in-memory on filter changes
-const rawDataCache = { batting: null, bowling: null };
 
-// Multi-select state: key → Set of selected values
+// Cache of raw scorecard rows per tab — fetched once, filtered in-memory
+const rawDataCache = { batting: null, bowling: null, fielding: null };
+
+// Multi-select state
 const multiSelectState = {
   tournament: new Set(),
   category: new Set(),
@@ -661,7 +715,6 @@ const multiSelectState = {
   venue: new Set(),
 };
 
-// Multi-select options cache
 const multiSelectOptions = {
   tournament: [],
   category: [],
@@ -670,26 +723,19 @@ const multiSelectOptions = {
   venue: [],
 };
 
-// Lookup maps populated from reference tables
-let seriesInfoMap = {};    // series_name → { category, ball_type, max_overs, format_label }
-let matchInfoMap  = {};    // match_id → { venue, match_date }
+let seriesInfoMap = {};
+let matchInfoMap  = {};
 let filtersCollapsed = false;
 
 // ─── INIT ─────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // No default date range — leave blank so all data shows by default
-
   if (SUPABASE_URL && SUPABASE_KEY &&
       !SUPABASE_URL.includes('%%') && !SUPABASE_KEY.includes('%%')) {
     loadReferenceData().then(() => loadData(true));
   }
-
-  // Close dropdowns on outside click
   document.addEventListener('click', e => {
     if (!e.target.closest('.multi-select-wrapper')) closeAllMultiSelects();
   });
-
-  // Single delegated change listener for ALL multi-select checkboxes
   document.addEventListener('change', e => {
     const cb = e.target;
     if (cb.type !== 'checkbox' || !cb.dataset.key) return;
@@ -738,7 +784,6 @@ function closeAllMultiSelects() {
 
 function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
-// msOptsMap: listElementId → full options array, used by the delegated change listener
 const msOptsMap = {};
 
 function buildMultiSelectList(key, options) {
@@ -750,13 +795,12 @@ function renderMultiSelectList(key, options) {
   _renderMSItems(key, options);
 }
 
-// Core render — always uses multiSelectOptions[key] as the source of truth for indices
 function _renderMSItems(key, visibleOptions) {
   const allOpts = multiSelectOptions[key] || visibleOptions;
   const list = document.getElementById(`ms${capitalize(key)}List`);
   if (!list) return;
   const selected = multiSelectState[key];
-  msOptsMap[list.id] = allOpts; // store for change handler lookup
+  msOptsMap[list.id] = allOpts;
   list.innerHTML = visibleOptions.map(opt => {
     const idx = allOpts.indexOf(opt);
     const esc = opt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
@@ -787,7 +831,6 @@ function selectAllMultiSelect(key) {
 function applyMultiSelect(key) {
   closeAllMultiSelects();
   updateActiveChips();
-  // Re-filter cached data — no Supabase fetch needed
   filterAndRender();
 }
 
@@ -804,7 +847,6 @@ function updateMultiSelectTrigger(key) {
   };
   if (selected.size === 0) {
     label.textContent = labels[key];
-    // Remove badge if any
     trigger.querySelectorAll('.select-badge').forEach(b => b.remove());
   } else {
     const arr = [...selected];
@@ -876,6 +918,7 @@ async function saveConfig() {
   closeConfig();
   rawDataCache.batting = null;
   rawDataCache.bowling = null;
+  rawDataCache.fielding = null;
   await loadReferenceData();
   await loadData(true);
 }
@@ -912,7 +955,6 @@ async function queryAll(table, params = '', onProgress = null) {
 // ─── LOAD REFERENCE DATA ─────────────────────────────────
 async function loadReferenceData() {
   try {
-    // Load series info
     const seriesRows = await queryAll('tca_db_series_info', 'select=series_name,category,ball_type,max_overs');
     seriesInfoMap = {};
     seriesRows.forEach(r => {
@@ -924,18 +966,15 @@ async function loadReferenceData() {
       };
     });
 
-    // Load match info
     const matchRows = await queryAll('tca_db_match_info', 'select=match_id,match_date,venue');
     matchInfoMap = {};
     matchRows.forEach(r => {
-      // Normalise key to string so Set.has() works regardless of int vs string from Supabase
       matchInfoMap[String(r.match_id)] = {
-        match_date: r.match_date ? r.match_date.slice(0, 10) : '', // ensure YYYY-MM-DD
+        match_date: r.match_date ? r.match_date.slice(0, 10) : '',
         venue: r.venue || ''
       };
     });
 
-    // Build filter options from reference data
     buildFilterOptionsFromReference();
   } catch(e) {
     console.warn('Could not load reference data:', e.message);
@@ -948,43 +987,46 @@ function getFormatLabel(max_overs) {
 }
 
 function buildFilterOptionsFromReference() {
-  // Tournaments from series info keys
   const tournaments = Object.keys(seriesInfoMap).sort();
   buildMultiSelectList('tournament', tournaments);
 
-  // Categories
   const categories = [...new Set(Object.values(seriesInfoMap).map(v => v.category).filter(Boolean))].sort();
   buildMultiSelectList('category', categories);
 
-  // Ball types
   const ballTypes = [...new Set(Object.values(seriesInfoMap).map(v => v.ball_type).filter(Boolean))].sort();
   buildMultiSelectList('ballType', ballTypes);
 
-  // Formats from max_overs
   const formats = [...new Set(Object.values(seriesInfoMap).map(v => v.format_label).filter(Boolean))].sort();
   buildMultiSelectList('format', formats);
 
-  // Venues
   const venues = [...new Set(Object.values(matchInfoMap).map(v => v.venue).filter(Boolean))].sort();
   buildMultiSelectList('venue', venues);
 }
 
-// ─── FILTER AND RENDER (no re-fetch) ─────────────────────
+// ─── FILTER AND RENDER ─────────────────────────────────────
 function filterAndRender() {
-  if (!rawDataCache[currentTab]) { loadData(true); return; }
+  if (currentTab === 'allround') {
+    // All-round needs both batting and bowling cached
+    const batReady  = rawDataCache.batting  !== null;
+    const bowlReady = rawDataCache.bowling  !== null;
+    if (!batReady || !bowlReady) { loadData(true); return; }
+  } else {
+    if (!rawDataCache[currentTab]) { loadData(true); return; }
+  }
   updateActiveChips();
   selectedPlayerIds.clear();
   updateSelectionBar();
-  applyFilters();
-  if (currentTab === 'batting') processBatting();
-  else processBowling();
+  if (currentTab === 'allround') {
+    processAllRound();
+  } else {
+    applyFilters(currentTab);
+    if (currentTab === 'batting') processBatting();
+    else processBowling();
+  }
 }
 
-// ─── FILTER HELPER — applies all active filters against cached raw rows ──
-function applyFilters() {
-  const raw = rawDataCache[currentTab];
-  if (!raw) return;
-
+// ─── FILTER HELPER ──────────────────────────────────────────
+function buildValidSets() {
   const dateFrom = document.getElementById('filterDateFrom').value;
   const dateTo   = document.getElementById('filterDateTo').value;
   const selVenues      = multiSelectState.venue;
@@ -997,7 +1039,6 @@ function applyFilters() {
                           selFormats.size > 0 || selTournaments.size > 0;
   const hasMatchFilter  = dateFrom || dateTo || selVenues.size > 0;
 
-  // Build valid series name set from seriesInfoMap
   let validSeriesNames = null;
   if (hasSeriesFilter) {
     validSeriesNames = new Set();
@@ -1010,7 +1051,6 @@ function applyFilters() {
     });
   }
 
-  // Build valid match_id set from matchInfoMap
   let validMatchIds = null;
   if (hasMatchFilter) {
     validMatchIds = new Set();
@@ -1018,27 +1058,25 @@ function applyFilters() {
       if (dateFrom && info.match_date < dateFrom) return;
       if (dateTo   && info.match_date > dateTo)   return;
       if (selVenues.size > 0 && !selVenues.has(info.venue)) return;
-      validMatchIds.add(matchId); // already stored as string
+      validMatchIds.add(matchId);
     });
   }
 
-  allData = raw.filter(r => {
+  return { validMatchIds, validSeriesNames };
+}
+
+function applyFilters(tab) {
+  const raw = rawDataCache[tab];
+  if (!raw) return;
+  const { validMatchIds, validSeriesNames } = buildValidSets();
+  allData[tab] = raw.filter(r => {
     if (validMatchIds    && !validMatchIds.has(String(r.match_id))) return false;
     if (validSeriesNames && !validSeriesNames.has(r.event_name))    return false;
     return true;
   });
-  console.debug('[TCA] applyFilters →', {
-    rawRows: raw.length,
-    filtered: allData.length,
-    validMatchIds: validMatchIds ? validMatchIds.size : 'n/a',
-    validSeriesNames: validSeriesNames ? validSeriesNames.size : 'n/a',
-    dateFrom, dateTo,
-  });
 }
 
 // ─── LOAD DATA ────────────────────────────────────────────
-// forceFetch=true  → re-download from Supabase (tab switch, first connect)
-// forceFetch=false → re-filter cached data only (any filter change)
 async function loadData(forceFetch = false) {
   if (!SUPABASE_URL || !SUPABASE_KEY ||
       SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
@@ -1048,24 +1086,52 @@ async function loadData(forceFetch = false) {
   updateSelectionBar();
 
   try {
-    if (forceFetch || !rawDataCache[currentTab]) {
-      // Need to fetch from Supabase
-      const table = currentTab === 'batting'
-        ? 'tca_db_scorecard_batting'
-        : 'tca_db_scorecard_bowling';
-      showLoading();
-      setConnStatus('loading');
-      const data = await queryAll(table, 'select=*', (count, total) => {
-        updateLoadingProgress(count, total);
-      });
-      rawDataCache[currentTab] = data;
+    if (currentTab === 'allround') {
+      // Fetch batting + bowling + fielding if needed
+      const needBat   = forceFetch || !rawDataCache.batting;
+      const needBowl  = forceFetch || !rawDataCache.bowling;
+      const needField = forceFetch || !rawDataCache.fielding;
+
+      if (needBat || needBowl || needField) {
+        showLoading();
+        setConnStatus('loading');
+      }
+
+      if (needBat) {
+        rawDataCache.batting = await queryAll('tca_db_scorecard_batting', 'select=*', (c, t) => updateLoadingProgress(c, t, 'batting'));
+      }
+      if (needBowl) {
+        rawDataCache.bowling = await queryAll('tca_db_scorecard_bowling', 'select=*', (c, t) => updateLoadingProgress(c, t, 'bowling'));
+      }
+      if (needField) {
+        // Fielding data from match_fielding or scorecard_fielding table
+        // Gracefully handle missing table
+        try {
+          rawDataCache.fielding = await queryAll('tca_db_scorecard_fielding', 'select=*', (c, t) => updateLoadingProgress(c, t, 'fielding'));
+        } catch(e) {
+          console.warn('Fielding table not found or empty, using empty array:', e.message);
+          rawDataCache.fielding = [];
+        }
+      }
+
       setConnStatus('connected');
+      processAllRound();
+
+    } else {
+      if (forceFetch || !rawDataCache[currentTab]) {
+        const table = currentTab === 'batting'
+          ? 'tca_db_scorecard_batting'
+          : 'tca_db_scorecard_bowling';
+        showLoading();
+        setConnStatus('loading');
+        rawDataCache[currentTab] = await queryAll(table, 'select=*', (c, t) => updateLoadingProgress(c, t, currentTab));
+        setConnStatus('connected');
+      }
+
+      applyFilters(currentTab);
+      if (currentTab === 'batting') processBatting();
+      else processBowling();
     }
-
-    applyFilters();
-
-    if (currentTab === 'batting') processBatting();
-    else processBowling();
 
   } catch(e) {
     setConnStatus('error');
@@ -1074,49 +1140,87 @@ async function loadData(forceFetch = false) {
 }
 
 // ─── PROCESS BATTING ──────────────────────────────────────
-function processBatting() {
+// FIX: Batting average = total runs / dismissals (innings where player WAS OUT)
+// Not-out innings still count toward innings total but not toward the denominator
+function processBatting(dataOverride) {
+  const rows = dataOverride || allData['batting'];
+  if (!rows) return;
+
   const byPlayer = {};
-  allData.forEach(row => {
+  rows.forEach(row => {
     const id = row.batter_id; if (!id) return;
-    if (!byPlayer[id]) byPlayer[id] = { id, name: row.batter_name, innings: 0, runs: 0, balls: 0, fours: 0, sixes: 0, notOuts: 0, highScore: 0, fifties: 0, hundreds: 0 };
+    if (!byPlayer[id]) byPlayer[id] = {
+      id, name: row.batter_name,
+      innings: 0, runs: 0, balls: 0,
+      fours: 0, sixes: 0,
+      notOuts: 0,      // innings where batter was NOT dismissed
+      highScore: 0, highScoreNotOut: false,
+      fifties: 0, hundreds: 0
+    };
     const p = byPlayer[id];
     p.innings++;
-    p.runs += row.runs || 0;
+    p.runs  += row.runs  || 0;
     p.balls += row.balls || 0;
     p.fours += row.fours || 0;
     p.sixes += row.sixes || 0;
-    if (row.dismissal_type === 'not_out') p.notOuts++;
+
+    // ── NOT-OUT DETECTION ──────────────────────────────────────────────────
+    // Support common dismissal_type values: 'not_out', 'notout', 'not out',
+    // null/undefined (absent/DNB rows are excluded by the innings++ above,
+    // but if a row exists with no dismissal assume not-out)
+    const dt = (row.dismissal_type || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isNotOut = dt === 'notout' || dt === '' || dt === 'retired' || dt === 'retiredhurt';
+    if (isNotOut) p.notOuts++;
+
     if (row.runs >= 100) p.hundreds++;
     else if (row.runs >= 50) p.fifties++;
-    if ((row.runs || 0) > p.highScore) p.highScore = row.runs;
+
+    const runs = row.runs || 0;
+    if (runs > p.highScore || (runs === p.highScore && isNotOut)) {
+      p.highScore = runs;
+      p.highScoreNotOut = isNotOut;
+    }
   });
 
-  const rows = Object.values(byPlayer).map(p => {
+  const processed = Object.values(byPlayer).map(p => {
+    // Dismissals = innings where batter was actually out
     const dismissals = p.innings - p.notOuts;
-    const avg = dismissals > 0 ? (p.runs / dismissals) : p.runs;
-    const sr  = p.balls > 0 ? ((p.runs / p.balls) * 100) : 0;
-    return { ...p, avg: +avg.toFixed(2), sr: +sr.toFixed(2) };
+    // Average: if never dismissed, average = total runs (standard cricket convention)
+    const avg = dismissals > 0 ? +(p.runs / dismissals).toFixed(2) : (p.runs > 0 ? p.runs : 0);
+    const sr  = p.balls > 0 ? +((p.runs / p.balls) * 100).toFixed(2) : 0;
+    return { ...p, avg, sr };
   });
 
-  const total = rows.reduce((s, r) => s + r.runs, 0);
-  renderSummary([
-    { label: 'Total Players', value: rows.length, sub: 'in dataset' },
-    { label: 'Total Runs', value: total.toLocaleString(), sub: 'across all innings' },
-    { label: 'Centuries', value: rows.reduce((s, r) => s + r.hundreds, 0), sub: '100+ scores' },
-    { label: 'Top Avg', value: rows.filter(r => r.innings >= 3).sort((a, b) => b.avg - a.avg)[0]?.avg || '-', sub: 'min 3 innings' },
-  ]);
+  if (!dataOverride) {
+    const total = processed.reduce((s, r) => s + r.runs, 0);
+    renderSummary([
+      { label: 'Total Players', value: processed.length, sub: 'in dataset' },
+      { label: 'Total Runs', value: total.toLocaleString(), sub: 'across all innings' },
+      { label: 'Centuries', value: processed.reduce((s, r) => s + r.hundreds, 0), sub: '100+ scores' },
+      { label: 'Top Avg', value: processed.filter(r => r.innings >= 3).sort((a, b) => b.avg - a.avg)[0]?.avg || '-', sub: 'min 3 innings' },
+    ]);
+    currentSort = { col: 'runs', dir: 'desc' };
+    window._processedData = processed;
+    renderTable();
+  }
 
-  currentSort = { col: 'runs', dir: 'desc' };
-  window._processedData = rows;
-  renderTable();
+  return processed;
 }
 
 // ─── PROCESS BOWLING ──────────────────────────────────────
-function processBowling() {
+function processBowling(dataOverride) {
+  const rows = dataOverride || allData['bowling'];
+  if (!rows) return;
+
   const byPlayer = {};
-  allData.forEach(row => {
+  rows.forEach(row => {
     const id = row.bowler_id; if (!id) return;
-    if (!byPlayer[id]) byPlayer[id] = { id, name: row.bowler_name, matches: 0, overs: 0, runs: 0, wickets: 0, maidens: 0, wides: 0, noBalls: 0, fiveWickets: 0, bestWkts: 0, bestRuns: 999 };
+    if (!byPlayer[id]) byPlayer[id] = {
+      id, name: row.bowler_name,
+      matches: 0, overs: 0, runs: 0, wickets: 0,
+      maidens: 0, wides: 0, noBalls: 0,
+      fiveWickets: 0, bestWkts: 0, bestRuns: 999
+    };
     const p = byPlayer[id];
     p.matches++;
     p.overs    += row.overs    || 0;
@@ -1131,22 +1235,138 @@ function processBowling() {
     }
   });
 
-  const rows = Object.values(byPlayer).map(p => {
+  const processed = Object.values(byPlayer).map(p => {
     const avg = p.wickets > 0 ? +(p.runs / p.wickets).toFixed(2) : null;
     const eco = p.overs > 0   ? +(p.runs / p.overs).toFixed(2)   : 0;
     const sr  = p.wickets > 0 ? +((p.overs * 6) / p.wickets).toFixed(2) : null;
     return { ...p, avg, eco, sr, best: `${p.bestWkts}/${p.bestRuns}` };
   });
 
-  renderSummary([
-    { label: 'Total Bowlers', value: rows.length, sub: 'in dataset' },
-    { label: 'Total Wickets', value: rows.reduce((s, r) => s + r.wickets, 0), sub: 'across all games' },
-    { label: 'Five-Fors', value: rows.reduce((s, r) => s + r.fiveWickets, 0), sub: '5+ wickets in an innings' },
-    { label: 'Best Economy', value: rows.filter(r => r.overs >= 5).sort((a, b) => a.eco - b.eco)[0]?.eco || '-', sub: 'min 5 overs' },
+  if (!dataOverride) {
+    renderSummary([
+      { label: 'Total Bowlers', value: processed.length, sub: 'in dataset' },
+      { label: 'Total Wickets', value: processed.reduce((s, r) => s + r.wickets, 0), sub: 'across all games' },
+      { label: 'Five-Fors', value: processed.reduce((s, r) => s + r.fiveWickets, 0), sub: '5+ wickets in an innings' },
+      { label: 'Best Economy', value: processed.filter(r => r.overs >= 5).sort((a, b) => a.eco - b.eco)[0]?.eco || '-', sub: 'min 5 overs' },
+    ]);
+    currentSort = { col: 'wickets', dir: 'desc' };
+    window._processedData = processed;
+    renderTable();
+  }
+
+  return processed;
+}
+
+// ─── PROCESS FIELDING ─────────────────────────────────────
+// Expects table: tca_db_scorecard_fielding with columns:
+//   fielder_id, fielder_name, match_id, event_name,
+//   catches, stumpings, run_outs (direct), run_outs_indirect (optional)
+function processFielding(dataOverride) {
+  const rows = dataOverride || rawDataCache.fielding || [];
+  const byPlayer = {};
+  rows.forEach(row => {
+    const id = row.fielder_id; if (!id) return;
+    if (!byPlayer[id]) byPlayer[id] = {
+      id, name: row.fielder_name,
+      catches: 0, stumpings: 0, runOuts: 0, runOutsIndirect: 0
+    };
+    const p = byPlayer[id];
+    p.catches         += row.catches          || 0;
+    p.stumpings       += row.stumpings        || 0;
+    p.runOuts         += row.run_outs         || 0;
+    p.runOutsIndirect += row.run_outs_indirect || 0;
+  });
+  return Object.values(byPlayer).map(p => ({
+    ...p,
+    dismissals: p.catches + p.stumpings + p.runOuts + p.runOutsIndirect
+  }));
+}
+
+// ─── PROCESS ALL-ROUND ────────────────────────────────────
+function processAllRound() {
+  // Apply filters to both batting and bowling cached data
+  applyFilters('batting');
+  applyFilters('bowling');
+
+  const batData  = allData['batting']  || [];
+  const bowlData = allData['bowling']  || [];
+
+  const { validMatchIds, validSeriesNames } = buildValidSets();
+  const fieldRaw = (rawDataCache.fielding || []).filter(r => {
+    if (validMatchIds    && !validMatchIds.has(String(r.match_id))) return false;
+    if (validSeriesNames && !validSeriesNames.has(r.event_name))    return false;
+    return true;
+  });
+
+  const batMap   = {};
+  const bowlMap  = {};
+  const fieldMap = {};
+
+  // Build batting map (player_id → batting stats)
+  const batProcessed = processBatting(batData) || [];
+  batProcessed.forEach(p => { batMap[p.id] = p; });
+
+  // Build bowling map
+  const bowlProcessed = processBowling(bowlData) || [];
+  bowlProcessed.forEach(p => { bowlMap[p.id] = p; });
+
+  // Build fielding map
+  const fieldProcessed = processFielding(fieldRaw);
+  fieldProcessed.forEach(p => { fieldMap[p.id] = p; });
+
+  // Union of all player IDs
+  const allIds = new Set([
+    ...Object.keys(batMap),
+    ...Object.keys(bowlMap),
+    ...Object.keys(fieldMap)
   ]);
 
-  currentSort = { col: 'wickets', dir: 'desc' };
-  window._processedData = rows;
+  const combined = [];
+  allIds.forEach(id => {
+    const b  = batMap[id]   || {};
+    const bw = bowlMap[id]  || {};
+    const f  = fieldMap[id] || {};
+
+    // Resolve player name from whichever record has it
+    const name = b.name || bw.name || f.name || 'Unknown';
+
+    combined.push({
+      id,
+      name,
+      // Batting
+      batInnings: b.innings   || 0,
+      batRuns:    b.runs      || 0,
+      batAvg:     b.avg       ?? null,
+      batSR:      b.sr        ?? null,
+      batHS:      b.highScore || 0,
+      bat50s:     b.fifties   || 0,
+      bat100s:    b.hundreds  || 0,
+      // Bowling
+      bowlInnings: bw.matches  || 0,
+      bowlWkts:    bw.wickets  || 0,
+      bowlAvg:     bw.avg      ?? null,
+      bowlEco:     bw.eco      ?? null,
+      bowlBest:    bw.best     || '-',
+      bowl5W:      bw.fiveWickets || 0,
+      // Fielding
+      catches:     f.catches    || 0,
+      stumpings:   f.stumpings  || 0,
+      runOuts:     f.runOuts    || 0,
+      fieldDis:    f.dismissals || 0,
+    });
+  });
+
+  const totalPlayers = combined.length;
+  const doubleContribs = combined.filter(p => p.batRuns >= 100 && p.bowlWkts >= 5).length;
+  renderSummary([
+    { label: 'Total Players', value: totalPlayers, sub: 'bat + bowl combined' },
+    { label: 'Total Runs', value: combined.reduce((s, p) => s + p.batRuns, 0).toLocaleString(), sub: 'all batting innings' },
+    { label: 'Total Wickets', value: combined.reduce((s, p) => s + p.bowlWkts, 0), sub: 'all bowling innings' },
+    { label: 'Double Contribs', value: doubleContribs, sub: '100+ runs & 5+ wkts' },
+  ]);
+
+  currentSort = { col: 'batRuns', dir: 'desc' };
+  window._processedData = combined;
   renderTable();
 }
 
@@ -1158,9 +1378,12 @@ function renderTable() {
   if (currentTab === 'batting') {
     const min = parseInt(document.getElementById('filterMinInnings').value);
     data = data.filter(r => r.innings >= min);
-  } else {
+  } else if (currentTab === 'bowling') {
     const min = parseInt(document.getElementById('filterMinOvers').value);
     data = data.filter(r => r.overs >= min);
+  } else if (currentTab === 'allround') {
+    const minInn = parseInt(document.getElementById('filterArMinInnings').value);
+    data = data.filter(r => r.batInnings >= minInn);
   }
 
   const search = document.getElementById('searchInput').value.toLowerCase();
@@ -1171,6 +1394,7 @@ function renderTable() {
       const va = a[currentSort.col], vb = b[currentSort.col];
       if (va === null && vb === null) return 0;
       if (va === null) return 1; if (vb === null) return -1;
+      if (typeof va === 'string') return currentSort.dir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
       return currentSort.dir === 'desc' ? vb - va : va - vb;
     });
   }
@@ -1189,7 +1413,8 @@ function renderTable() {
   }
 
   if (currentTab === 'batting') renderBattingTable(pageData, container, start);
-  else renderBowlingTable(pageData, container, start);
+  else if (currentTab === 'bowling') renderBowlingTable(pageData, container, start);
+  else renderAllRoundTable(pageData, container, start);
 
   renderPagination(total, totalPages, container);
 }
@@ -1198,6 +1423,8 @@ function renderBattingTable(data, container, offset) {
   document.getElementById('tableTitle').textContent = 'BATTING LEADERS';
   document.getElementById('batMinGroup').style.display = '';
   document.getElementById('bowlMinGroup').style.display = 'none';
+  document.getElementById('allroundMinGroup').style.display = 'none';
+  document.getElementById('colLegend').style.display = 'none';
 
   const cols = [
     { key: null, label: '✓', noSort: true },
@@ -1220,7 +1447,7 @@ function renderBattingTable(data, container, offset) {
     `<strong>${r.name}</strong>`,
     r.innings,
     `<span class="highlight">${r.runs}</span>`,
-    r.highScore,
+    r.highScoreNotOut ? `${r.highScore}*` : r.highScore,
     r.avg !== null ? colorNum(r.avg, 25, 40) : '-',
     r.sr  !== null ? colorNum(r.sr, 100, 130) : '-',
     r.fours, r.sixes, r.fifties, r.hundreds,
@@ -1231,6 +1458,8 @@ function renderBowlingTable(data, container, offset) {
   document.getElementById('tableTitle').textContent = 'BOWLING LEADERS';
   document.getElementById('batMinGroup').style.display = 'none';
   document.getElementById('bowlMinGroup').style.display = '';
+  document.getElementById('allroundMinGroup').style.display = 'none';
+  document.getElementById('colLegend').style.display = 'none';
 
   const cols = [
     { key: null, label: '✓', noSort: true },
@@ -1263,32 +1492,88 @@ function renderBowlingTable(data, container, offset) {
   ], r => selectedPlayerIds.has(r.id));
 }
 
-function buildTable(cols, data, offset, rowFn, isSelectedFn) {
-  const headCells = cols.map(c => {
-    if (!c.key || c.noSort) return `<th class="no-sort">${c.label}</th>`;
+function renderAllRoundTable(data, container, offset) {
+  document.getElementById('tableTitle').textContent = 'ALL-ROUND STATS';
+  document.getElementById('batMinGroup').style.display = 'none';
+  document.getElementById('bowlMinGroup').style.display = 'none';
+  document.getElementById('allroundMinGroup').style.display = '';
+  document.getElementById('colLegend').style.display = 'flex';
+
+  // Columns with group classes for colour-coding
+  const cols = [
+    { key: null,          label: '✓',    noSort: true, cls: '' },
+    { key: null,          label: '#',    noSort: true, cls: '' },
+    { key: 'name',        label: 'Player', noSort: true, cls: '' },
+    // Batting group
+    { key: 'batInnings',  label: 'Inn',  cls: 'col-group-bat col-sep' },
+    { key: 'batRuns',     label: 'Runs', cls: 'col-group-bat' },
+    { key: 'batAvg',      label: 'Avg',  cls: 'col-group-bat' },
+    { key: 'batSR',       label: 'SR',   cls: 'col-group-bat' },
+    { key: 'bat50s',      label: '50s',  cls: 'col-group-bat' },
+    { key: 'bat100s',     label: '100s', cls: 'col-group-bat' },
+    // Bowling group
+    { key: 'bowlInnings', label: 'Inn',  cls: 'col-group-bowl col-sep' },
+    { key: 'bowlWkts',    label: 'Wkts', cls: 'col-group-bowl' },
+    { key: 'bowlAvg',     label: 'Avg',  cls: 'col-group-bowl' },
+    { key: 'bowlEco',     label: 'Econ', cls: 'col-group-bowl' },
+    { key: 'bowlBest',    label: 'Best', cls: 'col-group-bowl', noSort: true },
+    { key: 'bowl5W',      label: '5W',   cls: 'col-group-bowl' },
+    // Fielding group
+    { key: 'catches',     label: 'Ct',   cls: 'col-group-field col-sep' },
+    { key: 'stumpings',   label: 'St',   cls: 'col-group-field' },
+    { key: 'runOuts',     label: 'RO',   cls: 'col-group-field' },
+    { key: 'fieldDis',    label: 'Total', cls: 'col-group-field' },
+  ];
+
+  container.innerHTML = buildTable(cols, data, offset, (r, i) => [
+    `<input type="checkbox" class="row-check" ${selectedPlayerIds.has(r.id) ? 'checked' : ''} onchange="togglePlayerSelect('${r.id}', this.checked)">`,
+    `<span class="rank">${offset + i + 1}</span>`,
+    `<strong>${r.name}</strong>`,
+    // Batting
+    r.batInnings,
+    `<span class="highlight">${r.batRuns}</span>`,
+    r.batAvg !== null ? colorNum(r.batAvg, 25, 40) : '-',
+    r.batSR  !== null ? colorNum(r.batSR, 100, 130) : '-',
+    r.bat50s,
+    r.bat100s,
+    // Bowling
+    r.bowlInnings,
+    `<span class="highlight-blue">${r.bowlWkts}</span>`,
+    r.bowlAvg !== null ? colorNumInv(r.bowlAvg, 20, 35) : '-',
+    r.bowlEco !== null ? colorNumInv(r.bowlEco, 6, 9)   : '-',
+    r.bowlBest,
+    r.bowl5W,
+    // Fielding
+    `<span class="highlight-green">${r.catches}</span>`,
+    r.stumpings,
+    r.runOuts,
+    `<span class="highlight-green">${r.fieldDis}</span>`,
+  ], r => selectedPlayerIds.has(r.id), cols);
+}
+
+function buildTable(cols, data, offset, rowFn, isSelectedFn, colDefs) {
+  const defs = colDefs || cols;
+  const allSelected = data.every(r => selectedPlayerIds.has(r.id));
+
+  const allHeadCells = defs.map((c, idx) => {
+    const cls = c.cls ? ` ${c.cls}` : '';
+    if (idx === 0) {
+      return `<th class="no-sort${cls}"><input type="checkbox" class="row-check" ${allSelected && data.length > 0 ? 'checked' : ''} onchange="togglePageSelectAll(this.checked)" title="Select all on page"></th>`;
+    }
+    if (!c.key || c.noSort) return `<th class="no-sort${cls}">${c.label}</th>`;
     const sorted = currentSort.col === c.key;
     const dir = sorted ? (currentSort.dir === 'desc' ? '↓' : '↑') : '↕';
-    return `<th class="${sorted ? 'sorted' : ''}" onclick="sortBy('${c.key}')">${c.label} <span class="sort-icon">${dir}</span></th>`;
+    return `<th class="${sorted ? 'sorted' : ''}${cls}" onclick="sortBy('${c.key}')">${c.label} <span class="sort-icon">${dir}</span></th>`;
   }).join('');
-
-  // Select-all checkbox in header
-  const allSelected = data.every(r => selectedPlayerIds.has(r.id));
-  const headFirst = `<th class="no-sort"><input type="checkbox" class="row-check" ${allSelected && data.length > 0 ? 'checked' : ''} onchange="togglePageSelectAll(this.checked)" title="Select all on page"></th>`;
-  const finalHead = headFirst + headCells.slice(headCells.indexOf('>') + 1); // replace first th
 
   const bodyRows = data.map((r, i) => {
-    const cells = rowFn(r, i).map(v => `<td>${v}</td>`).join('');
+    const values = rowFn(r, i);
+    const cells = values.map((v, ci) => {
+      const cls = defs[ci]?.cls ? ` class="${defs[ci].cls}"` : '';
+      return `<td${cls}>${v}</td>`;
+    }).join('');
     const sel = isSelectedFn ? isSelectedFn(r) : false;
     return `<tr class="${sel ? 'selected-row' : ''}">${cells}</tr>`;
-  }).join('');
-
-  // Rebuild properly
-  const allHeadCells = cols.map((c, idx) => {
-    if (idx === 0) return `<th class="no-sort"><input type="checkbox" class="row-check" ${allSelected && data.length > 0 ? 'checked' : ''} onchange="togglePageSelectAll(this.checked)" title="Select all on page"></th>`;
-    if (!c.key || c.noSort) return `<th class="no-sort">${c.label}</th>`;
-    const sorted = currentSort.col === c.key;
-    const dir = sorted ? (currentSort.dir === 'desc' ? '↓' : '↑') : '↕';
-    return `<th class="${sorted ? 'sorted' : ''}" onclick="sortBy('${c.key}')">${c.label} <span class="sort-icon">${dir}</span></th>`;
   }).join('');
 
   return `<div style="overflow-x:auto"><table><thead><tr>${allHeadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
@@ -1318,8 +1603,6 @@ function togglePlayerSelect(id, checked) {
   if (checked) selectedPlayerIds.add(id);
   else selectedPlayerIds.delete(id);
   updateSelectionBar();
-
-  // Update row highlight
   renderTable();
 }
 
@@ -1393,14 +1676,17 @@ function renderSummary(cards) {
 function switchTab(tab) {
   currentTab = tab;
   currentPage = 1;
-  document.querySelectorAll('.tab').forEach((t, i) =>
-    t.classList.toggle('active', (i === 0 && tab === 'batting') || (i === 1 && tab === 'bowling'))
-  );
-  allData = [];
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active',
+      (i === 0 && tab === 'batting') ||
+      (i === 1 && tab === 'bowling') ||
+      (i === 2 && tab === 'allround')
+    );
+  });
   window._processedData = null;
   selectedPlayerIds.clear();
   updateSelectionBar();
-  loadData(true); // force fetch — different table
+  loadData(false); // use cached data where possible; loadData handles allround specially
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────
@@ -1412,7 +1698,7 @@ function exportCSV(selectedOnly = false) {
     data = data.filter(r => selectedPlayerIds.has(r.id));
   }
 
-  const exclude = ['bestWkts', 'bestRuns', 'id'];
+  const exclude = ['bestWkts', 'bestRuns', 'id', 'highScoreNotOut'];
   const keys = Object.keys(data[0]).filter(k => !exclude.includes(k));
   const rows = [keys.join(','), ...data.map(r => keys.map(k => `"${r[k] ?? ''}"`).join(','))];
   const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
@@ -1444,14 +1730,15 @@ function showLoading() {
   document.getElementById('summaryCards').innerHTML = '';
 }
 
-function updateLoadingProgress(current, total) {
+function updateLoadingProgress(current, total, label) {
   const el = document.getElementById('fetchProgress');
   if (el) {
+    const prefix = label ? `[${label}] ` : '';
     if (total > 0) {
       const pct = Math.round((current / total) * 100);
-      el.textContent = `${pct}% loaded (${current.toLocaleString()} / ${total.toLocaleString()} rows)`;
+      el.textContent = `${prefix}${pct}% loaded (${current.toLocaleString()} / ${total.toLocaleString()} rows)`;
     } else {
-      el.textContent = `${current.toLocaleString()} rows fetched…`;
+      el.textContent = `${prefix}${current.toLocaleString()} rows fetched…`;
     }
   }
 }
