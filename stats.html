@@ -916,7 +916,8 @@
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Search player..." id="searchInput" oninput="renderTable()" style="min-width:180px">
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="exportCSV(false)">⬇ Export All</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportCSV(false)">⬇ CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportPDF()">📄 PDF</button>
         <button class="btn btn-primary btn-sm" id="exportSelectedBtn" onclick="exportCSV(true)" style="display:none">⬇ Export Selected</button>
       </div>
     </div>
@@ -943,7 +944,7 @@
   </div>
 </div>
 
-<!-- CONFIG MODAL -->
+
 <div class="modal-overlay" id="configModal">
   <div class="modal">
     <h2>Database Config</h2>
@@ -964,9 +965,30 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════
-     PLAYER DETAIL PANEL
-═══════════════════════════════════════════════ -->
+
+<!-- PDF TITLE MODAL -->
+<div class="modal-overlay" id="pdfTitleModal">
+  <div class="modal">
+    <h2>Export as PDF</h2>
+    <p>Give your report a custom title. Leave blank to use the default tab name.</p>
+    <div class="form-group">
+      <label>Report Title</label>
+      <input type="text" id="pdfTitleInput" placeholder="e.g. TCA Premiers 2025 – Batting" maxlength="80"
+             onkeydown="if(event.key==='Enter') confirmPDFExport()">
+    </div>
+    <div class="form-group">
+      <label>Subtitle / Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="pdfSubtitleInput" placeholder="e.g. Min 5 innings · Red ball only" maxlength="120"
+             onkeydown="if(event.key==='Enter') confirmPDFExport()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePDFTitleModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPDFExport()">Generate PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER DETAIL PANEL -->
 <div class="player-panel-overlay" id="playerPanelOverlay" onclick="closePlayerPanel()"></div>
 <div class="player-panel" id="playerPanel">
   <div class="player-panel-header" id="playerPanelHeader">
@@ -2041,6 +2063,280 @@ function switchTab(tab) {
   selectedPlayerIds.clear();
   updateSelectionBar();
   loadData(false);
+}
+
+// ─── EXPORT PDF ───────────────────────────────────────────
+function exportPDF() {
+  const data = window._filteredData;
+  if (!data || !data.length) return;
+  // Pre-fill title with sensible default then show modal
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  document.getElementById('pdfTitleInput').value = `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}`;
+  document.getElementById('pdfSubtitleInput').value = '';
+  document.getElementById('pdfTitleModal').classList.add('open');
+  setTimeout(() => {
+    const inp = document.getElementById('pdfTitleInput');
+    inp.focus(); inp.select();
+  }, 80);
+}
+
+function closePDFTitleModal() {
+  document.getElementById('pdfTitleModal').classList.remove('open');
+}
+
+function confirmPDFExport() {
+  const customTitle    = document.getElementById('pdfTitleInput').value.trim();
+  const customSubtitle = document.getElementById('pdfSubtitleInput').value.trim();
+  closePDFTitleModal();
+  generatePDF(customTitle, customSubtitle);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('pdfTitleModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closePDFTitleModal();
+  });
+});
+
+function generatePDF(customTitle, customSubtitle) {
+  const data = window._filteredData;
+  if (!data || !data.length) return;
+
+  const defaultTabLabels = {
+    batting:  'Batting Leaders',
+    bowling:  'Bowling Leaders',
+    fielding: 'Fielding Leaders',
+    allround: 'All-Round Stats',
+  };
+
+  // Build column definitions matching the current tab
+  let headers = [], rows = [];
+
+  if (currentTab === 'batting') {
+    headers = ['#','Player','Inn','Runs','HS','Avg','SR','4s','6s','50s','100s'];
+    rows = data.map((r, i) => [
+      i+1, r.name, r.innings, r.runs,
+      r.highScoreNotOut ? `${r.highScore}*` : r.highScore,
+      r.avg ?? '-', r.sr ?? '-', r.fours, r.sixes, r.fifties, r.hundreds
+    ]);
+  } else if (currentTab === 'bowling') {
+    headers = ['#','Player','Inn','Overs','Wkts','Runs','Avg','Econ','SR','Mdn','Best','5W'];
+    rows = data.map((r, i) => [
+      i+1, r.name, r.matches, r.overs.toFixed(1), r.wickets, r.runs,
+      r.avg ?? '-', r.eco ?? '-', r.sr ?? '-', r.maidens, r.best, r.fiveWickets
+    ]);
+  } else if (currentTab === 'fielding') {
+    headers = ['#','Player','Total','Ct (Field)','Ct (WK)','St','RO'];
+    rows = data.map((r, i) => [
+      i+1, r.name, r.totalDismissals, r.catches, r.catchesWk, r.stumpings, r.runOuts
+    ]);
+  } else if (currentTab === 'allround') {
+    headers = ['#','Player','Bat Inn','Runs','Avg','SR','50s','100s','Bowl Inn','Wkts','Avg','Econ','Best','Ct','St','RO'];
+    rows = data.map((r, i) => [
+      i+1, r.name, r.batInnings, r.batRuns, r.batAvg ?? '-', r.batSR ?? '-',
+      r.bat50s, r.bat100s, r.bowlInnings, r.bowlWkts, r.bowlAvg ?? '-',
+      r.bowlEco ?? '-', r.bowlBest, r.catches, r.stumpings, r.runOuts
+    ]);
+  }
+
+  const now = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+  const title = customTitle || defaultTabLabels[currentTab] || 'Stats';
+
+  // Active filter summary — shown below custom subtitle if present
+  const filterParts = [];
+  Object.entries(multiSelectState).forEach(([key, val]) => {
+    if (val.size > 0) filterParts.push([...val].join(', '));
+  });
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  if (dateFrom || dateTo) filterParts.push(`${dateFrom || '…'} → ${dateTo || '…'}`);
+  const filterLine = filterParts.length ? filterParts.join(' · ') : 'All data';
+
+  // Compose the subtitle shown in the PDF header
+  const subtitleLine = customSubtitle
+    ? `${customSubtitle} · ${filterLine}`
+    : filterLine;
+
+  const tableRows = rows.map(row => `
+    <tr>${row.map((cell, ci) => `<td class="${ci === 1 ? 'player-col' : ''}">${cell ?? ''}</td>`).join('')}</tr>
+  `).join('');
+
+  const printHTML = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: #fff; color: #111; font-size: 9pt; }
+
+  .pdf-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 2.5px solid #111;
+  }
+  .pdf-logo {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pdf-logo-icon {
+    width: 32px; height: 32px;
+    background: #e8ff47;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .pdf-logo-text h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 18pt;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .pdf-logo-text p {
+    font-size: 7pt;
+    color: #666;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-top: 2px;
+  }
+  .pdf-header-right { text-align: right; }
+  .pdf-header-right .report-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 15pt;
+    letter-spacing: 1.5px;
+    color: #111;
+  }
+  .pdf-header-right .report-meta {
+    font-size: 7pt;
+    color: #666;
+    margin-top: 3px;
+  }
+  .pdf-header-right .report-filters {
+    font-size: 7pt;
+    color: #444;
+    margin-top: 2px;
+    max-width: 320px;
+    text-align: right;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2px;
+  }
+  thead th {
+    background: #111;
+    color: #e8ff47;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 7pt;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    padding: 5px 6px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  thead th:first-child { width: 24px; text-align: center; border-radius: 0; }
+
+  tbody tr:nth-child(even) { background: #f7f7f7; }
+  tbody tr:nth-child(odd)  { background: #fff; }
+
+  tbody td {
+    font-family: 'DM Mono', monospace;
+    font-size: 8pt;
+    padding: 4px 6px;
+    border-bottom: 1px solid #e8e8e8;
+    white-space: nowrap;
+  }
+  tbody td:first-child {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 7.5pt;
+    color: #888;
+    text-align: center;
+  }
+  tbody td.player-col {
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 600;
+    font-size: 8.5pt;
+    color: #111;
+  }
+
+  .pdf-footer {
+    margin-top: 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 7pt;
+    color: #aaa;
+    border-top: 1px solid #ddd;
+    padding-top: 5px;
+  }
+
+  .summary-bar {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 8px;
+    margin-top: 4px;
+  }
+  .summary-item {
+    background: #f4f4f4;
+    border-radius: 6px;
+    padding: 5px 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  .summary-item .s-label { font-size: 6.5pt; color: #888; text-transform: uppercase; letter-spacing: 0.8px; }
+  .summary-item .s-value { font-family: 'Bebas Neue', sans-serif; font-size: 14pt; color: #111; line-height: 1.1; }
+</style>
+</head>
+<body>
+
+<div class="pdf-header">
+  <div class="pdf-logo">
+    <div class="pdf-logo-icon">🏏</div>
+    <div class="pdf-logo-text">
+      <h1>TCA Cricket Stats</h1>
+      <p>Player Analytics Dashboard</p>
+    </div>
+  </div>
+  <div class="pdf-header-right">
+    <div class="report-title">${title}</div>
+    <div class="report-meta">Generated ${now} · ${rows.length} players</div>
+    <div class="report-filters">${subtitleLine}</div>
+  </div>
+</div>
+
+<table>
+  <thead>
+    <tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>
+  </thead>
+  <tbody>
+    ${tableRows}
+  </tbody>
+</table>
+
+<div class="pdf-footer">
+  <span>TCA Cricket Stats · tca_${currentTab}_${new Date().toISOString().split('T')[0]}</span>
+  <span>Landscape · A4</span>
+</div>
+
+<script>
+  window.onload = function() {
+    // Small delay to let Google Fonts load
+    setTimeout(function() { window.print(); }, 800);
+  };
+<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups for this page to export PDF.'); return; }
+  win.document.write(printHTML);
+  win.document.close();
 }
 
 // ─── EXPORT CSV ───────────────────────────────────────────
