@@ -6,6 +6,7 @@
 <title>TCA Cricket Stats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
     --bg: #0a0c0f;
@@ -916,9 +917,9 @@
           <span class="search-icon">🔍</span>
           <input type="text" placeholder="Search player..." id="searchInput" oninput="renderTable()" style="min-width:180px">
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="exportCSV(false)">⬇ CSV</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportExcel(false)">⬇ Excel</button>
         <button class="btn btn-secondary btn-sm" onclick="exportPDF(false)">📄 PDF</button>
-        <button class="btn btn-primary btn-sm" id="exportSelectedCSVBtn" onclick="exportCSV(true)" style="display:none">⬇ CSV Selected</button>
+        <button class="btn btn-primary btn-sm" id="exportSelectedCSVBtn" onclick="exportExcel(true)" style="display:none">⬇ Excel Selected</button>
         <button class="btn btn-primary btn-sm" id="exportSelectedPDFBtn" onclick="exportPDF(true)" style="display:none">📄 PDF Selected</button>
       </div>
     </div>
@@ -932,7 +933,7 @@
     <div class="selection-bar" id="selectionBar">
       <span class="selection-info" id="selectionInfo">0 players selected</span>
       <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear Selection</button>
-      <button class="btn btn-primary btn-sm" onclick="exportCSV(true)">⬇ CSV Selected</button>
+      <button class="btn btn-primary btn-sm" onclick="exportExcel(true)">⬇ Excel Selected</button>
       <button class="btn btn-primary btn-sm" onclick="exportPDF(true)">📄 PDF Selected</button>
     </div>
 
@@ -986,6 +987,33 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closePDFTitleModal()">Cancel</button>
       <button class="btn btn-primary" onclick="confirmPDFExport()">Generate PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXCEL TITLE MODAL -->
+<div class="modal-overlay" id="xlsTitleModal">
+  <div class="modal">
+    <h2>Export as Excel</h2>
+    <p>Customise the title and sheet name for your workbook.</p>
+    <div class="form-group">
+      <label>Report Title</label>
+      <input type="text" id="xlsTitleInput" placeholder="e.g. TCA Premiers 2025 – Batting" maxlength="80"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="form-group">
+      <label>Subtitle / Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="xlsSubtitleInput" placeholder="e.g. Min 5 innings · Red ball only" maxlength="120"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="form-group">
+      <label>Sheet Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="xlsSheetInput" placeholder="e.g. Batting Stats" maxlength="31"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeExcelTitleModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmExcelExport()">Generate Excel</button>
     </div>
   </div>
 </div>
@@ -2352,22 +2380,327 @@ function generatePDF(customTitle, customSubtitle, selectedOnly = false) {
   win.document.close();
 }
 
-// ─── EXPORT CSV ───────────────────────────────────────────
-function exportCSV(selectedOnly = false) {
+// ─── EXPORT EXCEL ─────────────────────────────────────────
+let _xlsSelectedOnly = false;
+
+// Column definitions per tab: { key, label, width, numFmt, align }
+function getXlsColDefs() {
+  if (currentTab === 'batting') return [
+    { key: 'name',          label: 'Player',      width: 28, numFmt: '@',       align: 'left'  },
+    { key: 'innings',       label: 'Inn',         width: 8,  numFmt: '0',       align: 'center'},
+    { key: 'runs',          label: 'Runs',        width: 10, numFmt: '0',       align: 'center'},
+    { key: '_hs',           label: 'HS',          width: 8,  numFmt: '@',       align: 'center'},
+    { key: 'avg',           label: 'Average',     width: 10, numFmt: '0.00',    align: 'center'},
+    { key: 'sr',            label: 'Strike Rate', width: 12, numFmt: '0.00',    align: 'center'},
+    { key: 'fours',         label: '4s',          width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'sixes',         label: '6s',          width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'fifties',       label: '50s',         width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'hundreds',      label: '100s',        width: 8,  numFmt: '0',       align: 'center'},
+    { key: 'notOuts',       label: 'Not Outs',    width: 10, numFmt: '0',       align: 'center'},
+  ];
+  if (currentTab === 'bowling') return [
+    { key: 'name',          label: 'Player',      width: 28, numFmt: '@',       align: 'left'  },
+    { key: 'matches',       label: 'Inn',         width: 8,  numFmt: '0',       align: 'center'},
+    { key: '_overs',        label: 'Overs',       width: 10, numFmt: '@',       align: 'center'},
+    { key: 'wickets',       label: 'Wickets',     width: 10, numFmt: '0',       align: 'center'},
+    { key: 'runs',          label: 'Runs',        width: 10, numFmt: '0',       align: 'center'},
+    { key: 'avg',           label: 'Average',     width: 10, numFmt: '0.00',    align: 'center'},
+    { key: 'eco',           label: 'Economy',     width: 10, numFmt: '0.00',    align: 'center'},
+    { key: 'sr',            label: 'Strike Rate', width: 12, numFmt: '0.00',    align: 'center'},
+    { key: 'maidens',       label: 'Maidens',     width: 10, numFmt: '0',       align: 'center'},
+    { key: 'best',          label: 'Best',        width: 8,  numFmt: '@',       align: 'center'},
+    { key: 'fiveWickets',   label: '5W',          width: 7,  numFmt: '0',       align: 'center'},
+  ];
+  if (currentTab === 'fielding') return [
+    { key: 'name',          label: 'Player',      width: 28, numFmt: '@',       align: 'left'  },
+    { key: 'totalDismissals',label:'Total',       width: 10, numFmt: '0',       align: 'center'},
+    { key: 'catches',       label: 'Ct (Field)',  width: 12, numFmt: '0',       align: 'center'},
+    { key: 'catchesWk',     label: 'Ct (WK)',     width: 10, numFmt: '0',       align: 'center'},
+    { key: 'stumpings',     label: 'Stumpings',   width: 12, numFmt: '0',       align: 'center'},
+    { key: 'runOuts',       label: 'Run Outs',    width: 10, numFmt: '0',       align: 'center'},
+  ];
+  if (currentTab === 'allround') return [
+    { key: 'name',          label: 'Player',      width: 28, numFmt: '@',       align: 'left'  },
+    { key: 'batInnings',    label: 'Bat Inn',     width: 9,  numFmt: '0',       align: 'center'},
+    { key: 'batRuns',       label: 'Runs',        width: 9,  numFmt: '0',       align: 'center'},
+    { key: 'batAvg',        label: 'Bat Avg',     width: 9,  numFmt: '0.00',    align: 'center'},
+    { key: 'batSR',         label: 'Bat SR',      width: 9,  numFmt: '0.00',    align: 'center'},
+    { key: 'bat50s',        label: '50s',         width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'bat100s',       label: '100s',        width: 8,  numFmt: '0',       align: 'center'},
+    { key: 'bowlInnings',   label: 'Bowl Inn',    width: 9,  numFmt: '0',       align: 'center'},
+    { key: 'bowlWkts',      label: 'Wickets',     width: 9,  numFmt: '0',       align: 'center'},
+    { key: 'bowlAvg',       label: 'Bowl Avg',    width: 9,  numFmt: '0.00',    align: 'center'},
+    { key: 'bowlEco',       label: 'Economy',     width: 9,  numFmt: '0.00',    align: 'center'},
+    { key: 'bowlBest',      label: 'Best',        width: 8,  numFmt: '@',       align: 'center'},
+    { key: 'bowl5W',        label: '5W',          width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'catches',       label: 'Catches',     width: 9,  numFmt: '0',       align: 'center'},
+    { key: 'stumpings',     label: 'St',          width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'runOuts',       label: 'RO',          width: 7,  numFmt: '0',       align: 'center'},
+    { key: 'fieldDis',      label: 'Field Total', width: 11, numFmt: '0',       align: 'center'},
+  ];
+  return [];
+}
+
+function getRowValue(r, key) {
+  if (key === '_hs')    return r.highScoreNotOut ? `${r.highScore}*` : String(r.highScore ?? '');
+  if (key === '_overs') return r.overs != null ? r.overs.toFixed(1) : '';
+  const v = r[key];
+  if (v === null || v === undefined) return '';
+  return v;
+}
+
+function exportExcel(selectedOnly = false) {
+  const data = window._filteredData;
+  if (!data || !data.length) return;
+  _xlsSelectedOnly = selectedOnly;
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  const selSuffix = selectedOnly && selectedPlayerIds.size > 0 ? ' – Selected Players' : '';
+  const defaultTitle = `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}${selSuffix}`;
+  document.getElementById('xlsTitleInput').value   = defaultTitle;
+  document.getElementById('xlsSubtitleInput').value = '';
+  document.getElementById('xlsSheetInput').value   = tabLabels[currentTab] || 'Stats';
+  document.getElementById('xlsTitleModal').classList.add('open');
+  setTimeout(() => {
+    const inp = document.getElementById('xlsTitleInput');
+    inp.focus(); inp.select();
+  }, 80);
+}
+
+function closeExcelTitleModal() {
+  document.getElementById('xlsTitleModal').classList.remove('open');
+}
+
+function confirmExcelExport() {
+  const title    = document.getElementById('xlsTitleInput').value.trim();
+  const subtitle = document.getElementById('xlsSubtitleInput').value.trim();
+  const sheet    = document.getElementById('xlsSheetInput').value.trim();
+  closeExcelTitleModal();
+  generateExcel(title, subtitle, sheet, _xlsSelectedOnly);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('xlsTitleModal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) closeExcelTitleModal();
+  });
+});
+
+function generateExcel(customTitle, customSubtitle, customSheet, selectedOnly = false) {
+  if (typeof XLSX === 'undefined') {
+    alert('SheetJS library not loaded. Please check your internet connection and try again.');
+    return;
+  }
+
   let data = window._filteredData || [];
   if (!data.length) return;
   if (selectedOnly && selectedPlayerIds.size > 0) {
     data = data.filter(r => selectedPlayerIds.has(r.id));
   }
-  const exclude = ['bestWkts', 'bestRuns', 'id', 'highScoreNotOut'];
-  const keys = Object.keys(data[0]).filter(k => !exclude.includes(k));
-  const rows = [keys.join(','), ...data.map(r => keys.map(k => `"${r[k] ?? ''}"`).join(','))];
-  const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  const suffix = selectedOnly ? '_selected' : '';
-  a.download = `tca_${currentTab}_stats${suffix}_${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
+
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  const title    = customTitle    || `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}`;
+  const sheetName = (customSheet || tabLabels[currentTab] || 'Stats').slice(0, 31); // Excel 31-char limit
+
+  // Filter summary
+  const filterParts = [];
+  Object.entries(multiSelectState).forEach(([key, val]) => {
+    if (val.size > 0) filterParts.push([...val].join(', '));
+  });
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  if (dateFrom || dateTo) filterParts.push(`${dateFrom || '…'} → ${dateTo || '…'}`);
+  const filterLine = filterParts.length ? filterParts.join(' · ') : 'All data';
+  const subtitleLine = customSubtitle ? `${customSubtitle}  ·  ${filterLine}` : filterLine;
+  const now = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+
+  const cols = getXlsColDefs();
+  const numCols = cols.length;
+
+  // ── Build worksheet array-of-arrays ────────────────────────────────────────
+  // Row 1: Title (merged)
+  // Row 2: Subtitle/filters
+  // Row 3: Generated date + player count
+  // Row 4: blank
+  // Row 5: Column headers
+  // Row 6+: Data rows
+  // Last row: Totals (numeric columns)
+
+  const aoa = []; // array of arrays
+
+  aoa.push([title]);                          // row 1 — title
+  aoa.push([subtitleLine]);                   // row 2 — subtitle
+  aoa.push([`Generated: ${now}  ·  ${data.length} player${data.length !== 1 ? 's' : ''}${selectedOnly && selectedPlayerIds.size > 0 ? ' (selected)' : ''}`]); // row 3
+  aoa.push([]);                               // row 4 — blank spacer
+  aoa.push(cols.map(c => c.label));           // row 5 — headers
+
+  const dataStartRow = 6; // 1-indexed
+
+  data.forEach((r, i) => {
+    aoa.push(cols.map(c => getRowValue(r, c.key)));
+  });
+
+  // Totals row — sum numeric columns, skip string ones
+  const totalsRow = cols.map(c => {
+    if (c.key === 'name' || c.numFmt === '@') return c.key === 'name' ? 'TOTALS' : '';
+    if (c.key === 'avg' || c.key === 'batAvg' || c.key === 'bowlAvg' || c.key === 'sr' || c.key === 'batSR' || c.key === 'eco' || c.key === 'bowlEco') return ''; // averages don't sum
+    const colIdx = aoa[4].indexOf(c.label) + 1; // 1-indexed Excel col
+    const dataEndRow = dataStartRow + data.length - 1;
+    const colLetter = XLSX.utils.encode_col(cols.indexOf(c));
+    return { f: `SUM(${colLetter}${dataStartRow}:${colLetter}${dataEndRow})` };
+  });
+  aoa.push(totalsRow);
+
+  // ── Create workbook ────────────────────────────────────────────────────────
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // ── Column widths ──────────────────────────────────────────────────────────
+  ws['!cols'] = cols.map(c => ({ wch: c.width }));
+
+  // ── Merge title row across all columns ────────────────────────────────────
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: numCols - 1 } }, // title
+    { s: { r: 1, c: 0 }, e: { r: 1, c: numCols - 1 } }, // subtitle
+    { s: { r: 2, c: 0 }, e: { r: 2, c: numCols - 1 } }, // meta
+  ];
+
+  // ── Style helper ──────────────────────────────────────────────────────────
+  // SheetJS CE doesn't support cell styles natively, but xlsx-style or
+  // writing the styles inline works via the cell object's 's' property
+  // when using XLSX.write with bookType xlsx. We'll set styles on cell objects.
+  function cellRef(r, c) { return XLSX.utils.encode_cell({ r, c }); }
+
+  function setStyle(r, c, style) {
+    const ref = cellRef(r, c);
+    if (!ws[ref]) ws[ref] = { t: 'z', v: '' };
+    ws[ref].s = style;
+  }
+
+  function applyRangeStyle(rStart, rEnd, cStart, cEnd, style) {
+    for (let r = rStart; r <= rEnd; r++) {
+      for (let c = cStart; c <= cEnd; c++) {
+        const ref = cellRef(r, c);
+        if (ws[ref]) ws[ref].s = { ...(ws[ref].s || {}), ...style };
+        else { ws[ref] = { t: 'z', v: '', s: style }; }
+      }
+    }
+  }
+
+  // Colours
+  const C_DARK   = '0A0C0F';  // header bg
+  const C_ACCENT = 'E8FF47';  // accent yellow
+  const C_WHITE  = 'FFFFFF';
+  const C_ALT    = 'F4F6F9';  // alternating row
+  const C_TITLE_BG = '111318';
+  const C_TOTALS_BG = 'E8FF47';
+  const C_TOTALS_FG = '000000';
+  const C_BORDER = 'DDDDDD';
+
+  const borderThin = {
+    top:    { style: 'thin', color: { rgb: C_BORDER } },
+    bottom: { style: 'thin', color: { rgb: C_BORDER } },
+    left:   { style: 'thin', color: { rgb: C_BORDER } },
+    right:  { style: 'thin', color: { rgb: C_BORDER } },
+  };
+
+  // Row 1 — title
+  const titleCell = ws[cellRef(0, 0)];
+  if (titleCell) titleCell.s = {
+    font:      { bold: true, sz: 18, color: { rgb: C_ACCENT }, name: 'Arial' },
+    fill:      { fgColor: { rgb: C_TITLE_BG } },
+    alignment: { horizontal: 'left', vertical: 'center', wrapText: false },
+  };
+  applyRangeStyle(0, 0, 1, numCols - 1, { fill: { fgColor: { rgb: C_TITLE_BG } } });
+
+  // Row 2 — subtitle
+  const subCell = ws[cellRef(1, 0)];
+  if (subCell) subCell.s = {
+    font:      { sz: 9, color: { rgb: '9CA3AF' }, name: 'Arial' },
+    fill:      { fgColor: { rgb: C_TITLE_BG } },
+    alignment: { horizontal: 'left', vertical: 'center' },
+  };
+  applyRangeStyle(1, 1, 1, numCols - 1, { fill: { fgColor: { rgb: C_TITLE_BG } } });
+
+  // Row 3 — meta
+  const metaCell = ws[cellRef(2, 0)];
+  if (metaCell) metaCell.s = {
+    font:      { sz: 8, italic: true, color: { rgb: '6B7280' }, name: 'Arial' },
+    fill:      { fgColor: { rgb: C_TITLE_BG } },
+    alignment: { horizontal: 'left', vertical: 'center' },
+  };
+  applyRangeStyle(2, 2, 1, numCols - 1, { fill: { fgColor: { rgb: C_TITLE_BG } } });
+
+  // Row 5 — column headers (index 4)
+  for (let c = 0; c < numCols; c++) {
+    const ref = cellRef(4, c);
+    if (ws[ref]) ws[ref].s = {
+      font:      { bold: true, sz: 9, color: { rgb: C_ACCENT }, name: 'Arial' },
+      fill:      { fgColor: { rgb: C_DARK } },
+      alignment: { horizontal: cols[c].align || 'center', vertical: 'center' },
+      border:    borderThin,
+    };
+  }
+
+  // Data rows (index 5 → 5+data.length-1)
+  for (let ri = 0; ri < data.length; ri++) {
+    const rowIdx = 5 + ri;
+    const isAlt  = ri % 2 === 1;
+    const bgColor = isAlt ? C_ALT : C_WHITE;
+    for (let c = 0; c < numCols; c++) {
+      const ref = cellRef(rowIdx, c);
+      if (!ws[ref]) continue;
+      const isPlayer = c === 0;
+      ws[ref].s = {
+        font:      { sz: 9, bold: isPlayer, color: { rgb: '111318' }, name: 'Arial' },
+        fill:      { fgColor: { rgb: bgColor } },
+        alignment: { horizontal: cols[c].align || 'center', vertical: 'center' },
+        border:    borderThin,
+        numFmt:    cols[c].numFmt !== '@' ? cols[c].numFmt : undefined,
+      };
+      // Apply number format for numeric cells
+      if (cols[c].numFmt && cols[c].numFmt !== '@') {
+        ws[ref].z = cols[c].numFmt;
+      }
+    }
+  }
+
+  // Totals row (last row)
+  const totalsRowIdx = 5 + data.length;
+  for (let c = 0; c < numCols; c++) {
+    const ref = cellRef(totalsRowIdx, c);
+    if (!ws[ref]) ws[ref] = { t: 'z', v: '' };
+    ws[ref].s = {
+      font:      { bold: true, sz: 9, color: { rgb: C_TOTALS_FG }, name: 'Arial' },
+      fill:      { fgColor: { rgb: C_TOTALS_BG } },
+      alignment: { horizontal: cols[c].align || 'center', vertical: 'center' },
+      border:    {
+        top:    { style: 'medium', color: { rgb: '000000' } },
+        bottom: { style: 'medium', color: { rgb: '000000' } },
+        left:   { style: 'thin',   color: { rgb: C_BORDER } },
+        right:  { style: 'thin',   color: { rgb: C_BORDER } },
+      },
+    };
+  }
+
+  // Row heights (approximate, in points)
+  ws['!rows'] = [
+    { hpt: 32 }, // title
+    { hpt: 16 }, // subtitle
+    { hpt: 14 }, // meta
+    { hpt: 6  }, // spacer
+    { hpt: 18 }, // headers
+    ...Array(data.length).fill({ hpt: 15 }), // data
+    { hpt: 18 }, // totals
+  ];
+
+  // Freeze panes: freeze top 5 rows + first column
+  ws['!freeze'] = { xSplit: 1, ySplit: 5 };
+
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  // ── Download ───────────────────────────────────────────────────────────────
+  const suffix = selectedOnly && selectedPlayerIds.size > 0 ? '_selected' : '';
+  const filename = `tca_${currentTab}${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, filename, { cellStyles: true });
 }
 
 // ─── STATUS ───────────────────────────────────────────────
