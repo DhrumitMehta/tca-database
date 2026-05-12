@@ -2216,7 +2216,8 @@ async function loadPlayerDetail(playerId, fallbackName) {
       const coveredKeys = new Set(['player_id','full_name','player_name','name','first_name','last_name',
         'date_of_birth','dob','batting_style','batting_hand','bat_style',
         'bowling_style','bowling_type','bowl_style','playing_role','role','player_type',
-        'nationality','country','team_country']);
+        'nationality','country','team_country','scraped_at','created_at','updated_at',
+        'inserted_at','modified_at','timestamp']);
       Object.entries(info).forEach(([k, v]) => {
         if (coveredKeys.has(k) || !v || typeof v === 'object') return;
         addInfo(k.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()), v);
