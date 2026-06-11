@@ -1,0 +1,3565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCA Cricket Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --border: #252830;
+    --accent: #e8ff47;
+    --accent2: #47c8ff;
+    --red: #ff5252;
+    --green: #4ade80;
+    --text: #f0f2f5;
+    --muted: #6b7280;
+    --muted2: #9ca3af;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo h1 { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; letter-spacing: 2px; color: var(--text); }
+  .logo span { font-family: 'DM Sans', sans-serif; font-size: 0.75rem; color: var(--muted); font-weight: 300; letter-spacing: 1px; text-transform: uppercase; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+
+  .tabs { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 4px; margin-bottom: 1.5rem; width: fit-content; }
+  .tab { padding: 8px 20px; border-radius: 7px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--muted2); transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
+  .tab.active { background: var(--accent); color: #000; }
+
+  /* FILTER PANEL */
+  .filter-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    cursor: pointer;
+  }
+
+  .filter-panel-title {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .active-filter-count {
+    background: var(--accent);
+    color: #000;
+    border-radius: 4px;
+    font-size: 0.65rem;
+    padding: 1px 6px;
+    font-weight: 700;
+  }
+
+  .filter-toggle-icon { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; }
+  .filter-toggle-icon.open { transform: rotate(180deg); }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 500; }
+
+  select, input[type="text"], input[type="date"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  /* MULTI-SELECT DROPDOWN */
+  .multi-select-wrapper { position: relative; }
+
+  .multi-select-trigger {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    user-select: none;
+    transition: border-color 0.2s;
+    min-height: 38px;
+  }
+
+  .multi-select-trigger:hover, .multi-select-trigger.open { border-color: var(--accent); }
+
+  .multi-select-trigger .trigger-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    font-size: 0.85rem;
+  }
+
+  .multi-select-trigger .trigger-arrow { color: var(--muted); font-size: 0.7rem; flex-shrink: 0; }
+
+  .multi-select-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    z-index: 50;
+    max-height: 260px;
+    display: none;
+    flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    min-width: 220px;
+  }
+
+  .multi-select-dropdown.open { display: flex; }
+
+  .multi-select-search {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .multi-select-search input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    width: 100%;
+  }
+
+  .multi-select-list {
+    overflow-y: auto;
+    flex: 1;
+    padding: 4px;
+  }
+
+  .multi-select-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+
+  .multi-select-item:hover { background: var(--surface2); }
+  .multi-select-item.selected { color: var(--accent); }
+
+  .multi-select-item input[type="checkbox"] {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 0;
+  }
+
+  .multi-select-footer {
+    padding: 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .multi-select-footer button {
+    flex: 1;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--muted2);
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.15s;
+  }
+
+  .multi-select-footer button:hover { border-color: var(--accent); color: var(--accent); }
+  .multi-select-footer button.apply { background: var(--accent); color: #000; border-color: var(--accent); }
+  .multi-select-footer button.apply:hover { background: #d4eb3a; }
+
+  .select-badge {
+    background: rgba(232,255,71,0.15);
+    color: var(--accent);
+    border-radius: 3px;
+    font-size: 0.65rem;
+    padding: 1px 5px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* DATE RANGE */
+  .date-range { display: flex; gap: 6px; align-items: center; }
+  .date-range input { flex: 1; min-width: 0; }
+  .date-sep { color: var(--muted); font-size: 0.75rem; flex-shrink: 0; }
+
+  /* FILTER ACTIONS ROW */
+  .filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .active-filters {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(232,255,71,0.1);
+    color: var(--accent);
+    border: 1px solid rgba(232,255,71,0.2);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
+  .filter-chip .remove { cursor: pointer; opacity: 0.7; }
+  .filter-chip .remove:hover { opacity: 1; }
+
+  /* BUTTONS */
+  .btn { padding: 9px 16px; border-radius: 8px; font-size: 0.875rem; font-weight: 500; cursor: pointer; border: none; font-family: 'DM Sans', sans-serif; transition: all 0.2s; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #d4eb3a; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-ghost { background: transparent; color: var(--muted2); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--muted2); color: var(--text); }
+  .btn-danger { background: rgba(255,82,82,0.1); color: var(--red); border: 1px solid rgba(255,82,82,0.2); }
+  .btn-danger:hover { background: rgba(255,82,82,0.2); }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+  /* SUMMARY CARDS */
+  .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; }
+  .stat-card .label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .value { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; line-height: 1; color: var(--accent); }
+  .stat-card .sub { font-size: 0.75rem; color: var(--muted2); margin-top: 2px; }
+
+  /* TABLE */
+  .table-wrapper { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+  .table-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 1px; color: var(--text); }
+  .table-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  .search-input { position: relative; }
+  .search-input input { padding-left: 32px; }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 14px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--surface2); padding: 10px 14px; text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 600; cursor: pointer; white-space: nowrap; user-select: none; }
+  thead th:hover { color: var(--text); }
+  thead th.sorted { color: var(--accent); }
+  thead th .sort-icon { margin-left: 4px; opacity: 0.5; }
+  thead th.sorted .sort-icon { opacity: 1; }
+  thead th.no-sort { cursor: default; }
+
+  thead th.col-sep { border-left: 2px solid var(--border); }
+  thead th.col-group-bat { background: rgba(232,255,71,0.06); }
+  thead th.col-group-bowl { background: rgba(71,200,255,0.06); }
+  thead th.col-group-field { background: rgba(74,222,128,0.06); }
+
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody tr.selected-row { background: rgba(232,255,71,0.05); }
+
+  tbody td { padding: 10px 14px; font-size: 0.875rem; font-family: 'DM Mono', monospace; white-space: nowrap; }
+  tbody td:first-child { font-family: 'DM Sans', sans-serif; }
+  tbody td.player-cell { font-family: 'DM Sans', sans-serif; font-weight: 500; }
+  tbody td.col-sep { border-left: 2px solid var(--border); }
+  tbody td.col-group-bat { background: rgba(232,255,71,0.02); }
+  tbody td.col-group-bowl { background: rgba(71,200,255,0.02); }
+  tbody td.col-group-field { background: rgba(74,222,128,0.02); }
+
+  /* PLAYER NAME LINK */
+  .player-link {
+    color: var(--text);
+    text-decoration: none;
+    font-weight: 600;
+    cursor: pointer;
+    border-bottom: 1px dashed transparent;
+    transition: color 0.15s, border-color 0.15s;
+    font-family: 'DM Sans', sans-serif;
+  }
+  .player-link:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .rank { font-size: 0.75rem; color: var(--muted); width: 30px; display: inline-block; }
+  .highlight { color: var(--accent); font-weight: 500; }
+  .highlight-blue { color: var(--accent2); font-weight: 500; }
+  .highlight-green { color: #4ade80; font-weight: 500; }
+  .good { color: #4ade80; }
+  .bad { color: var(--red); }
+
+  /* ROW CHECKBOX */
+  .row-check { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+
+  /* SELECTION TOOLBAR */
+  .selection-bar {
+    display: none;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 1.25rem;
+    background: rgba(232,255,71,0.06);
+    border-bottom: 1px solid rgba(232,255,71,0.15);
+    font-size: 0.85rem;
+  }
+
+  .selection-bar.visible { display: flex; }
+  .selection-info { color: var(--accent); font-weight: 600; flex: 1; }
+
+  /* STATES */
+  .state-msg { text-align: center; padding: 4rem 2rem; color: var(--muted2); }
+  .state-msg .icon { font-size: 2.5rem; margin-bottom: 1rem; }
+  .state-msg h3 { font-size: 1rem; margin-bottom: 0.5rem; color: var(--text); }
+  .state-msg p { font-size: 0.875rem; line-height: 1.6; }
+
+  .spinner { width: 32px; height: 32px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 1rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 2rem; width: 480px; max-width: 95vw; }
+  .modal h2 { font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem; letter-spacing: 2px; margin-bottom: 0.5rem; }
+  .modal p { font-size: 0.875rem; color: var(--muted2); margin-bottom: 1.5rem; line-height: 1.5; }
+  .form-group { margin-bottom: 1rem; }
+  .form-group label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: var(--muted2); margin-bottom: 6px; }
+  .form-group input { width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text); padding: 10px 14px; border-radius: 8px; font-size: 0.875rem; font-family: 'DM Mono', monospace; outline: none; }
+  .form-group input:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 1.5rem; justify-content: flex-end; }
+
+  /* ALL-ROUNDER COLUMN LEGEND */
+  .col-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px 1.25rem;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .col-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    color: var(--muted2);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+  .col-legend-dot {
+    width: 10px; height: 10px; border-radius: 2px;
+  }
+  .col-legend-dot.bat  { background: rgba(232,255,71,0.4); }
+  .col-legend-dot.bowl { background: rgba(71,200,255,0.4); }
+  .col-legend-dot.field{ background: rgba(74,222,128,0.4); }
+
+  /* CONN STATUS */
+  .conn-status { font-size: 0.75rem; display: flex; align-items: center; gap: 6px; color: var(--muted2); }
+  .conn-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+  .conn-dot.connected { background: #4ade80; box-shadow: 0 0 6px #4ade8088; }
+  .conn-dot.error { background: var(--red); }
+
+  /* PAGINATION */
+  .pagination { display: flex; align-items: center; gap: 8px; padding: 1rem 1.25rem; border-top: 1px solid var(--border); justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .page-info { font-size: 0.8rem; color: var(--muted2); }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--muted2); cursor: pointer; font-size: 0.875rem; font-family: 'DM Sans', sans-serif; transition: all 0.15s; display: flex; align-items: center; justify-content: center; }
+  .page-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .page-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  .fetch-progress { font-size: 0.75rem; color: var(--accent); margin-top: 0.5rem; }
+
+  /* ═══════════════════════════════════════════════
+     PLAYER DETAIL PANEL (side drawer)
+  ═══════════════════════════════════════════════ */
+  .player-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(2px);
+    z-index: 300;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .player-panel-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .player-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 480px;
+    max-width: 100vw;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    z-index: 301;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .player-panel.open {
+    transform: translateX(0);
+  }
+
+  .player-panel-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-shrink: 0;
+  }
+
+  .player-avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(232,255,71,0.2), rgba(71,200,255,0.1));
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    flex-shrink: 0;
+    font-family: 'Bebas Neue', sans-serif;
+    color: var(--accent);
+    letter-spacing: 1px;
+  }
+
+  .player-panel-name {
+    flex: 1;
+  }
+
+  .player-panel-name h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 1.5px;
+    color: var(--text);
+    line-height: 1.1;
+    margin-bottom: 4px;
+  }
+
+  .player-panel-name .player-meta-tags {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  .meta-tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    color: var(--muted2);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .meta-tag.accent { background: rgba(232,255,71,0.1); color: var(--accent); border-color: rgba(232,255,71,0.2); }
+
+  .panel-close-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted2);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+
+  .panel-close-btn:hover {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .player-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1.5rem;
+  }
+
+  .panel-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .panel-section-title {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* INFO GRID */
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .info-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+
+  .info-item .info-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 3px;
+  }
+
+  .info-item .info-value {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  /* STAT GRID for panel */
+  .panel-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+
+  .panel-stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  .panel-stat .ps-label {
+    font-size: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .panel-stat .ps-value {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--accent);
+  }
+
+  .panel-stat .ps-value.blue { color: var(--accent2); }
+  .panel-stat .ps-value.green { color: var(--green); }
+
+  /* TEAMS LIST */
+  .teams-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .team-tag {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* PANEL LOADING */
+  .panel-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    gap: 1rem;
+    color: var(--muted2);
+    font-size: 0.875rem;
+  }
+
+  .panel-error {
+    background: rgba(255,82,82,0.08);
+    border: 1px solid rgba(255,82,82,0.2);
+    border-radius: 8px;
+    padding: 1rem;
+    color: var(--red);
+    font-size: 0.875rem;
+    text-align: center;
+  }
+
+  /* ═══════════════════════════════════════════════
+     HISTORY PANEL
+  ═══════════════════════════════════════════════ */
+  .history-panel-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(3px);
+    z-index: 400;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .history-panel-overlay.open {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .history-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 520px;
+    max-width: 100vw;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    z-index: 401;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .history-panel.open {
+    transform: translateX(0);
+  }
+
+  .history-panel-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .history-panel-header h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 2px;
+    color: var(--text);
+  }
+
+  .history-panel-header .history-count {
+    font-size: 0.75rem;
+    color: var(--muted2);
+    margin-top: 2px;
+  }
+
+  .history-panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+  }
+
+  .history-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 1rem;
+    gap: 0.75rem;
+    color: var(--muted2);
+    text-align: center;
+  }
+
+  .history-empty .icon { font-size: 2rem; }
+  .history-empty p { font-size: 0.875rem; line-height: 1.6; }
+
+  .history-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+
+  .history-item:hover {
+    border-color: rgba(232,255,71,0.3);
+  }
+
+  .history-item-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .history-item-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+    flex: 1;
+  }
+
+  .history-item-type {
+    font-size: 0.65rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 2px 6px;
+    color: var(--muted2);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+  }
+
+  .history-item-type.pdf  { color: var(--red);   border-color: rgba(255,82,82,0.3); background: rgba(255,82,82,0.08); }
+  .history-item-type.xlsx { color: var(--green); border-color: rgba(74,222,128,0.3); background: rgba(74,222,128,0.08); }
+
+  .history-item-meta {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+
+  .history-meta-chip {
+    font-size: 0.7rem;
+    color: var(--muted2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .history-item-subtitle {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  .history-item-players {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-bottom: 10px;
+    max-height: 60px;
+    overflow: hidden;
+  }
+
+  .history-player-tag {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    color: var(--muted2);
+    white-space: nowrap;
+  }
+
+  .history-player-tag.more {
+    color: var(--accent);
+    border-color: rgba(232,255,71,0.2);
+    background: rgba(232,255,71,0.08);
+  }
+
+  .history-item-actions {
+    display: flex;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  .history-panel-footer {
+    padding: 1rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ═══════════════════════════════════════════════
+     PDF IMPORT MODAL (wider)
+  ═══════════════════════════════════════════════ */
+  .modal-lg {
+    width: 560px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-lg .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  .import-drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 2rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 1rem;
+  }
+
+  .import-drop-zone:hover, .import-drop-zone.drag-over {
+    border-color: var(--accent);
+    background: rgba(232,255,71,0.04);
+  }
+
+  .import-drop-zone .drop-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+  .import-drop-zone p { font-size: 0.875rem; color: var(--muted2); }
+  .import-drop-zone p strong { color: var(--accent); }
+  .import-drop-zone .drop-note { font-size: 0.75rem; margin-top: 4px; }
+
+  .import-status {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+    font-size: 0.85rem;
+    color: var(--muted2);
+    margin-bottom: 1rem;
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .import-status.visible { display: flex; }
+  .import-status .mini-spinner { width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+
+  .import-results { margin-top: 0.5rem; }
+
+  .import-results-header {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .import-results-header::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  .import-player-list {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .import-player-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: var(--surface2);
+  }
+
+  .import-player-row.matched { border-left: 3px solid var(--green); }
+  .import-player-row.unmatched { border-left: 3px solid var(--muted); opacity: 0.6; }
+
+  .import-player-row .match-icon { font-size: 0.85rem; flex-shrink: 0; }
+  .import-player-row .pdf-name { color: var(--muted2); font-size: 0.8rem; }
+  .import-player-row .matched-name { color: var(--text); font-weight: 500; }
+  .import-player-row .arrow { color: var(--muted); font-size: 0.75rem; }
+
+  .import-summary-bar {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .import-summary-stat {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 0.8rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    text-align: center;
+  }
+
+  .import-summary-stat .isv {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    line-height: 1;
+    color: var(--accent);
+  }
+
+  .import-summary-stat .isl { font-size: 0.65rem; color: var(--muted2); text-transform: uppercase; letter-spacing: 0.8px; margin-top: 2px; }
+
+  .import-summary-stat.unmatched-stat .isv { color: var(--muted2); }
+
+  /* Toast notification */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    color: var(--text);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    max-width: 360px;
+  }
+
+  .toast.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .toast.success { border-left: 3px solid var(--green); }
+  .toast.error   { border-left: 3px solid var(--red); }
+  .toast.info    { border-left: 3px solid var(--accent2); }
+
+  .toast-icon { font-size: 1rem; flex-shrink: 0; }
+  .toast-text { flex: 1; line-height: 1.4; }
+  .toast-close { color: var(--muted); cursor: pointer; font-size: 0.9rem; flex-shrink: 0; }
+  .toast-close:hover { color: var(--text); }
+
+  @media (max-width: 768px) {
+    .container { padding: 1rem; }
+    .summary-cards { grid-template-columns: repeat(2, 1fr); }
+    header { padding: 0 1rem; }
+    .logo h1 { font-size: 1.3rem; }
+    .filter-grid { grid-template-columns: repeat(2, 1fr); }
+    .player-panel { width: 100vw; }
+    .history-panel { width: 100vw; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏏</div>
+    <div>
+      <h1>TCA CRICKET STATS</h1>
+      <span>Player Analytics Dashboard</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="conn-status">
+      <div class="conn-dot" id="connDot"></div>
+      <span id="connLabel">Not connected</span>
+    </div>
+    <button class="btn btn-ghost btn-sm" onclick="openHistoryPanel()" title="Export History">📋 History <span id="historyBadge" style="display:none;background:var(--accent);color:#000;border-radius:3px;padding:1px 5px;font-size:0.65rem;font-weight:700;margin-left:2px"></span></button>
+    <button class="btn btn-ghost" onclick="openConfig()">⚙ Config</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('batting')">🏏 Batting</button>
+    <button class="tab" onclick="switchTab('bowling')">⚡ Bowling</button>
+    <button class="tab" onclick="switchTab('allround')">⭐ All-Round</button>
+    <button class="tab" onclick="switchTab('fielding')">🧤 Fielding</button>
+  </div>
+
+  <!-- FILTER PANEL -->
+  <div class="filter-panel">
+    <div class="filter-panel-header" onclick="toggleFilters()">
+      <span class="filter-panel-title">
+        🔽 Filters
+        <span class="active-filter-count" id="activeFilterCount" style="display:none">0</span>
+      </span>
+      <span class="filter-toggle-icon open" id="filterToggleIcon">▲</span>
+    </div>
+
+    <div id="filterBody">
+      <div class="filter-grid">
+        <!-- DATE RANGE -->
+        <div class="filter-group" style="grid-column: span 2">
+          <label>Date Range</label>
+          <div class="date-range">
+            <input type="date" id="filterDateFrom" onchange="filterAndRender()">
+            <span class="date-sep">to</span>
+            <input type="date" id="filterDateTo" onchange="filterAndRender()">
+          </div>
+        </div>
+
+        <!-- TOURNAMENT -->
+        <div class="filter-group" style="grid-column: span 2">
+          <label>Tournament</label>
+          <div class="multi-select-wrapper" id="msTournamentWrapper">
+            <div class="multi-select-trigger" id="msTournamentTrigger" onclick="toggleMultiSelect('tournament')">
+              <span class="trigger-text" id="msTournamentLabel">All Tournaments</span>
+              <span class="trigger-arrow">▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="msTournamentDropdown">
+              <div class="multi-select-search"><input type="text" placeholder="Search…" oninput="filterMultiSelectList('tournament', this.value)"></div>
+              <div class="multi-select-list" id="msTournamentList"></div>
+              <div class="multi-select-footer">
+                <button onclick="clearMultiSelect('tournament')">Clear</button>
+                <button onclick="selectAllMultiSelect('tournament')">All</button>
+                <button class="apply" onclick="applyMultiSelect('tournament')">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- CATEGORY -->
+        <div class="filter-group">
+          <label>Category</label>
+          <div class="multi-select-wrapper" id="msCategoryWrapper">
+            <div class="multi-select-trigger" id="msCategoryTrigger" onclick="toggleMultiSelect('category')">
+              <span class="trigger-text" id="msCategoryLabel">All Categories</span>
+              <span class="trigger-arrow">▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="msCategoryDropdown">
+              <div class="multi-select-search"><input type="text" placeholder="Search…" oninput="filterMultiSelectList('category', this.value)"></div>
+              <div class="multi-select-list" id="msCategoryList"></div>
+              <div class="multi-select-footer">
+                <button onclick="clearMultiSelect('category')">Clear</button>
+                <button onclick="selectAllMultiSelect('category')">All</button>
+                <button class="apply" onclick="applyMultiSelect('category')">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BALL TYPE -->
+        <div class="filter-group">
+          <label>Ball Type</label>
+          <div class="multi-select-wrapper" id="msBallTypeWrapper">
+            <div class="multi-select-trigger" id="msBallTypeTrigger" onclick="toggleMultiSelect('ballType')">
+              <span class="trigger-text" id="msBallTypeLabel">All Ball Types</span>
+              <span class="trigger-arrow">▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="msBallTypeDropdown">
+              <div class="multi-select-list" id="msBallTypeList"></div>
+              <div class="multi-select-footer">
+                <button onclick="clearMultiSelect('ballType')">Clear</button>
+                <button onclick="selectAllMultiSelect('ballType')">All</button>
+                <button class="apply" onclick="applyMultiSelect('ballType')">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FORMAT -->
+        <div class="filter-group">
+          <label>Format</label>
+          <div class="multi-select-wrapper" id="msFormatWrapper">
+            <div class="multi-select-trigger" id="msFormatTrigger" onclick="toggleMultiSelect('format')">
+              <span class="trigger-text" id="msFormatLabel">All Formats</span>
+              <span class="trigger-arrow">▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="msFormatDropdown">
+              <div class="multi-select-list" id="msFormatList"></div>
+              <div class="multi-select-footer">
+                <button onclick="clearMultiSelect('format')">Clear</button>
+                <button onclick="selectAllMultiSelect('format')">All</button>
+                <button class="apply" onclick="applyMultiSelect('format')">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- VENUE -->
+        <div class="filter-group">
+          <label>Venue</label>
+          <div class="multi-select-wrapper" id="msVenueWrapper">
+            <div class="multi-select-trigger" id="msVenueTrigger" onclick="toggleMultiSelect('venue')">
+              <span class="trigger-text" id="msVenueLabel">All Venues</span>
+              <span class="trigger-arrow">▼</span>
+            </div>
+            <div class="multi-select-dropdown" id="msVenueDropdown">
+              <div class="multi-select-search"><input type="text" placeholder="Search…" oninput="filterMultiSelectList('venue', this.value)"></div>
+              <div class="multi-select-list" id="msVenueList"></div>
+              <div class="multi-select-footer">
+                <button onclick="clearMultiSelect('venue')">Clear</button>
+                <button onclick="selectAllMultiSelect('venue')">All</button>
+                <button class="apply" onclick="applyMultiSelect('venue')">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MIN INNINGS / MIN OVERS / MIN MATCHES -->
+        <div class="filter-group" id="batMinGroup">
+          <label>Min Innings</label>
+          <select id="filterMinInnings" onchange="renderTable()">
+            <option value="1">1+</option>
+            <option value="3" selected>3+</option>
+            <option value="5">5+</option>
+            <option value="10">10+</option>
+          </select>
+        </div>
+
+        <div class="filter-group" id="bowlMinGroup" style="display:none">
+          <label>Min Overs</label>
+          <select id="filterMinOvers" onchange="renderTable()">
+            <option value="1">1+</option>
+            <option value="5" selected>5+</option>
+            <option value="10">10+</option>
+            <option value="20">20+</option>
+          </select>
+        </div>
+
+        <div class="filter-group" id="allroundMinGroup" style="display:none">
+          <label>Min Innings (Bat)</label>
+          <select id="filterArMinInnings" onchange="renderTable()">
+            <option value="1">1+</option>
+            <option value="3" selected>3+</option>
+            <option value="5">5+</option>
+          </select>
+        </div>
+
+        <div class="filter-group" id="fieldMinGroup" style="display:none">
+          <label>Min Dismissals</label>
+          <select id="filterMinDismissals" onchange="renderTable()">
+            <option value="1" selected>1+</option>
+            <option value="3">3+</option>
+            <option value="5">5+</option>
+            <option value="10">10+</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="filter-actions">
+        <div class="active-filters" id="activeFilterChips"></div>
+        <button class="btn btn-ghost btn-sm" onclick="resetAllFilters()">✕ Reset All</button>
+        <button class="btn btn-primary btn-sm" onclick="filterAndRender()">Apply Filters</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY CARDS -->
+  <div class="summary-cards" id="summaryCards"></div>
+
+  <!-- TABLE -->
+  <div class="table-wrapper">
+    <div class="table-header">
+      <span class="table-title" id="tableTitle">BATTING LEADERS</span>
+      <div class="table-actions">
+        <div class="search-input">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Search player..." id="searchInput" oninput="renderTable()" style="min-width:180px">
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="openImportPDFModal()" title="Import player names from a previously exported PDF">📂 Import PDF</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportExcel(false)">⬇ Excel</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportPDF(false)">📄 PDF</button>
+        <button class="btn btn-primary btn-sm" id="exportSelectedCSVBtn" onclick="exportExcel(true)" style="display:none">⬇ Excel Selected</button>
+        <button class="btn btn-primary btn-sm" id="exportSelectedPDFBtn" onclick="exportPDF(true)" style="display:none">📄 PDF Selected</button>
+      </div>
+    </div>
+
+    <div class="col-legend" id="colLegend" style="display:none">
+      <span class="col-legend-item"><span class="col-legend-dot bat"></span> Batting</span>
+      <span class="col-legend-item"><span class="col-legend-dot bowl"></span> Bowling</span>
+      <span class="col-legend-item"><span class="col-legend-dot field"></span> Fielding</span>
+    </div>
+
+    <div class="selection-bar" id="selectionBar">
+      <span class="selection-info" id="selectionInfo">0 players selected</span>
+      <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear Selection</button>
+      <button class="btn btn-primary btn-sm" onclick="exportExcel(true)">⬇ Excel Selected</button>
+      <button class="btn btn-primary btn-sm" onclick="exportPDF(true)">📄 PDF Selected</button>
+    </div>
+
+    <div id="tableContainer">
+      <div class="state-msg">
+        <div class="icon">🔧</div>
+        <h3>Configure your database</h3>
+        <p>Click <strong>Config</strong> in the top right to enter your Supabase URL and API key.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODALS ═══════════════ -->
+
+<!-- CONFIG MODAL -->
+<div class="modal-overlay" id="configModal">
+  <div class="modal">
+    <h2>Database Config</h2>
+    <p>Enter your Supabase project URL and anonymous key. These are stored in your browser's local storage only.</p>
+    <div class="form-group">
+      <label>Supabase URL</label>
+      <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co">
+    </div>
+    <div class="form-group">
+      <label>Supabase Anon Key</label>
+      <input type="text" id="cfgKey" placeholder="eyJhbGci...">
+    </div>
+    <div id="cfgError" style="color:var(--red);font-size:0.8rem;margin-top:0.5rem;display:none;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfig()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveConfig()">Save & Connect</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF TITLE MODAL -->
+<div class="modal-overlay" id="pdfTitleModal">
+  <div class="modal">
+    <h2>Export as PDF</h2>
+    <p>Give your report a custom title. Leave blank to use the default tab name.</p>
+    <div class="form-group">
+      <label>Report Title</label>
+      <input type="text" id="pdfTitleInput" placeholder="e.g. TCA Premiers 2025 – Batting" maxlength="80"
+             onkeydown="if(event.key==='Enter') confirmPDFExport()">
+    </div>
+    <div class="form-group">
+      <label>Subtitle / Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="pdfSubtitleInput" placeholder="e.g. Min 5 innings · Red ball only" maxlength="120"
+             onkeydown="if(event.key==='Enter') confirmPDFExport()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePDFTitleModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmPDFExport()">Generate PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- EXCEL TITLE MODAL -->
+<div class="modal-overlay" id="xlsTitleModal">
+  <div class="modal">
+    <h2>Export as Excel</h2>
+    <p>Customise the title and sheet name for your workbook.</p>
+    <div class="form-group">
+      <label>Report Title</label>
+      <input type="text" id="xlsTitleInput" placeholder="e.g. TCA Premiers 2025 – Batting" maxlength="80"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="form-group">
+      <label>Subtitle / Notes <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="xlsSubtitleInput" placeholder="e.g. Min 5 innings · Red ball only" maxlength="120"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="form-group">
+      <label>Sheet Name <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+      <input type="text" id="xlsSheetInput" placeholder="e.g. Batting Stats" maxlength="31"
+             onkeydown="if(event.key==='Enter') confirmExcelExport()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeExcelTitleModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmExcelExport()">Generate Excel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF IMPORT MODAL -->
+<div class="modal-overlay" id="importPDFModal">
+  <div class="modal modal-lg">
+    <h2>Import Players from PDF</h2>
+    <p>Upload a previously exported TCA PDF. Player names will be extracted and matched to the current dataset.</p>
+
+    <div class="modal-body">
+      <!-- Drop zone -->
+      <div class="import-drop-zone" id="importDropZone" onclick="document.getElementById('pdfFileInput').click()">
+        <div class="drop-icon">📄</div>
+        <p><strong>Click to upload</strong> or drag & drop a PDF</p>
+        <p class="drop-note" style="color:var(--muted);font-size:0.75rem">Only PDF files are accepted</p>
+      </div>
+      <input type="file" id="pdfFileInput" accept=".pdf,application/pdf" style="display:none" onchange="handlePDFFileSelect(this)">
+
+      <!-- Status bar -->
+      <div class="import-status" id="importStatus">
+        <div class="mini-spinner"></div>
+        <span id="importStatusText">Analysing PDF…</span>
+      </div>
+
+      <!-- Results -->
+      <div class="import-results" id="importResults" style="display:none">
+        <!-- Summary stats -->
+        <div class="import-summary-bar" id="importSummaryBar"></div>
+
+        <!-- Matched players -->
+        <div id="matchedSection" style="display:none">
+          <div class="import-results-header">✅ Matched Players</div>
+          <div class="import-player-list" id="matchedPlayerList"></div>
+        </div>
+
+        <!-- Unmatched names -->
+        <div id="unmatchedSection" style="display:none">
+          <div class="import-results-header">❓ Not Found in Dataset</div>
+          <div class="import-player-list" id="unmatchedPlayerList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-actions" style="margin-top:1rem">
+      <button class="btn btn-ghost" onclick="closeImportPDFModal()">Cancel</button>
+      <button class="btn btn-secondary btn-sm" onclick="document.getElementById('pdfFileInput').click()">📂 Upload Different PDF</button>
+      <button class="btn btn-primary" id="confirmImportBtn" style="display:none" onclick="confirmPDFImport()">✓ Select Matched Players</button>
+    </div>
+  </div>
+</div>
+
+<!-- PLAYER DETAIL PANEL -->
+<div class="player-panel-overlay" id="playerPanelOverlay" onclick="closePlayerPanel()"></div>
+<div class="player-panel" id="playerPanel">
+  <div class="player-panel-header" id="playerPanelHeader">
+    <div class="player-avatar" id="playerPanelAvatar">?</div>
+    <div class="player-panel-name">
+      <h2 id="playerPanelName">—</h2>
+      <div class="player-meta-tags" id="playerPanelTags"></div>
+    </div>
+    <button class="panel-close-btn" onclick="closePlayerPanel()">✕</button>
+  </div>
+  <div class="player-panel-body" id="playerPanelBody">
+    <div class="panel-loading">
+      <div class="spinner"></div>
+      <span>Loading player…</span>
+    </div>
+  </div>
+</div>
+
+<!-- HISTORY PANEL -->
+<div class="history-panel-overlay" id="historyPanelOverlay" onclick="closeHistoryPanel()"></div>
+<div class="history-panel" id="historyPanel">
+  <div class="history-panel-header">
+    <div>
+      <h2>📋 Export History</h2>
+      <div class="history-count" id="historyCount">0 exports saved</div>
+    </div>
+    <button class="panel-close-btn" onclick="closeHistoryPanel()">✕</button>
+  </div>
+  <div class="history-panel-body" id="historyPanelBody">
+    <div class="history-empty">
+      <div class="icon">📂</div>
+      <p>No exports yet.<br>Your export history will appear here after you export a PDF or Excel file.</p>
+    </div>
+  </div>
+  <div class="history-panel-footer">
+    <button class="btn btn-ghost btn-sm" style="flex:1" onclick="clearAllHistory()">🗑 Clear All History</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span class="toast-icon" id="toastIcon"></span>
+  <span class="toast-text" id="toastText"></span>
+  <span class="toast-close" onclick="hideToast()">✕</span>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+// ─── STATE ───────────────────────────────────────────────
+const SUPABASE_URL = window.supabase.supabaseUrl;
+const SUPABASE_KEY = window.supabase.supabaseKey;
+let currentTab = 'batting';
+let allData = {};
+let currentSort = { col: null, dir: 'desc' };
+let currentPage = 1;
+const PAGE_SIZE = 25;
+let selectedPlayerIds = new Set();
+
+const rawDataCache = { batting: null, bowling: null, fielding: null };
+
+const multiSelectState = {
+  tournament: new Set(), category: new Set(),
+  ballType: new Set(), format: new Set(), venue: new Set(),
+};
+const multiSelectOptions = {
+  tournament: [], category: [], ballType: [], format: [], venue: [],
+};
+
+let seriesInfoMap = {};
+let matchInfoMap  = {};
+let playerInfoMap = {};
+let filtersCollapsed = false;
+
+// Export history in-memory
+let exportHistory = [];
+
+// PDF import matched data
+let _importMatchedIds = [];
+
+// ─── INIT ─────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadExportHistoryFromStorage();
+
+  if (SUPABASE_URL && SUPABASE_KEY &&
+      !SUPABASE_URL.includes('%%') && !SUPABASE_KEY.includes('%%')) {
+    loadReferenceData().then(() => loadData(true));
+  }
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.multi-select-wrapper')) closeAllMultiSelects();
+  });
+  document.addEventListener('change', e => {
+    const cb = e.target;
+    if (cb.type !== 'checkbox' || !cb.dataset.key) return;
+    const key = cb.dataset.key;
+    const idx = parseInt(cb.dataset.idx);
+    const listId = `ms${capitalize(key)}List`;
+    const allOpts = msOptsMap[listId];
+    if (!allOpts || idx < 0 || idx >= allOpts.length) return;
+    const value = allOpts[idx];
+    if (cb.checked) multiSelectState[key].add(value);
+    else multiSelectState[key].delete(value);
+    const label = cb.closest('label');
+    if (label) label.classList.toggle('selected', cb.checked);
+    updateMultiSelectTrigger(key);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      closePlayerPanel();
+      closeHistoryPanel();
+      closeImportPDFModal();
+    }
+  });
+
+  // Modal click-outside to close
+  document.getElementById('configModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConfig(); });
+  document.getElementById('pdfTitleModal').addEventListener('click', e => { if (e.target === e.currentTarget) closePDFTitleModal(); });
+  document.getElementById('xlsTitleModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeExcelTitleModal(); });
+  document.getElementById('importPDFModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeImportPDFModal(); });
+
+  // Drag-and-drop on import modal drop zone
+  const dz = document.getElementById('importDropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === 'application/pdf') processPDFFile(file);
+    else showToast('Please drop a PDF file.', 'error');
+  });
+});
+
+// ─── TOAST ────────────────────────────────────────────────
+let _toastTimeout = null;
+function showToast(msg, type = 'info', duration = 3500) {
+  const toast = document.getElementById('toast');
+  const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+  document.getElementById('toastIcon').textContent = icons[type] || 'ℹ️';
+  document.getElementById('toastText').textContent = msg;
+  toast.className = `toast ${type}`;
+  void toast.offsetWidth;
+  toast.classList.add('show');
+  if (_toastTimeout) clearTimeout(_toastTimeout);
+  _toastTimeout = setTimeout(hideToast, duration);
+}
+function hideToast() {
+  document.getElementById('toast').classList.remove('show');
+}
+
+// ─── FILTER PANEL TOGGLE ────────────────────────────────
+function toggleFilters() {
+  filtersCollapsed = !filtersCollapsed;
+  document.getElementById('filterBody').style.display = filtersCollapsed ? 'none' : '';
+  const icon = document.getElementById('filterToggleIcon');
+  icon.textContent = filtersCollapsed ? '▼' : '▲';
+  icon.classList.toggle('open', !filtersCollapsed);
+}
+
+// ─── MULTI-SELECT HELPERS ────────────────────────────────
+function toggleMultiSelect(key) {
+  const dropdown = document.getElementById(`ms${capitalize(key)}Dropdown`);
+  const isOpen = dropdown.classList.contains('open');
+  closeAllMultiSelects();
+  if (!isOpen) {
+    dropdown.classList.add('open');
+    document.getElementById(`ms${capitalize(key)}Trigger`).classList.add('open');
+  }
+}
+
+function closeAllMultiSelects() {
+  ['tournament','category','ballType','format','venue'].forEach(key => {
+    const dd = document.getElementById(`ms${capitalize(key)}Dropdown`);
+    const tr = document.getElementById(`ms${capitalize(key)}Trigger`);
+    if (dd) dd.classList.remove('open');
+    if (tr) tr.classList.remove('open');
+  });
+}
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+const msOptsMap = {};
+
+function buildMultiSelectList(key, options) {
+  multiSelectOptions[key] = options;
+  _renderMSItems(key, options);
+}
+
+function renderMultiSelectList(key, options) { _renderMSItems(key, options); }
+
+function _renderMSItems(key, visibleOptions) {
+  const allOpts = multiSelectOptions[key] || visibleOptions;
+  const list = document.getElementById(`ms${capitalize(key)}List`);
+  if (!list) return;
+  const selected = multiSelectState[key];
+  msOptsMap[list.id] = allOpts;
+  list.innerHTML = visibleOptions.map(opt => {
+    const idx = allOpts.indexOf(opt);
+    const esc = opt.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    const chk = selected.has(opt) ? 'checked' : '';
+    return `<label class="multi-select-item ${chk ? 'selected' : ''}"><input type="checkbox" ${chk} data-key="${key}" data-idx="${idx}">${esc}</label>`;
+  }).join('');
+}
+
+function filterMultiSelectList(key, search) {
+  const allOpts = multiSelectOptions[key];
+  const lower = search.toLowerCase();
+  const visible = lower ? allOpts.filter(o => o.toLowerCase().includes(lower)) : allOpts;
+  _renderMSItems(key, visible);
+}
+
+function clearMultiSelect(key) {
+  multiSelectState[key].clear();
+  renderMultiSelectList(key, multiSelectOptions[key]);
+  updateMultiSelectTrigger(key);
+}
+
+function selectAllMultiSelect(key) {
+  multiSelectOptions[key].forEach(o => multiSelectState[key].add(o));
+  renderMultiSelectList(key, multiSelectOptions[key]);
+  updateMultiSelectTrigger(key);
+}
+
+function applyMultiSelect(key) {
+  closeAllMultiSelects();
+  updateActiveChips();
+  filterAndRender();
+}
+
+function updateMultiSelectTrigger(key) {
+  const selected = multiSelectState[key];
+  const label = document.getElementById(`ms${capitalize(key)}Label`);
+  const trigger = document.getElementById(`ms${capitalize(key)}Trigger`);
+  const labels = { tournament:'All Tournaments', category:'All Categories', ballType:'All Ball Types', format:'All Formats', venue:'All Venues' };
+  if (selected.size === 0) {
+    label.textContent = labels[key];
+    trigger.querySelectorAll('.select-badge').forEach(b => b.remove());
+  } else {
+    const arr = [...selected];
+    label.textContent = arr.length === 1 ? arr[0] : `${arr[0]} +${arr.length - 1}`;
+    let badge = trigger.querySelector('.select-badge');
+    if (!badge) { badge = document.createElement('span'); badge.className = 'select-badge'; trigger.appendChild(badge); }
+    badge.textContent = arr.length;
+  }
+}
+
+function updateActiveChips() {
+  const chipContainer = document.getElementById('activeFilterChips');
+  const chips = [];
+  const labels = { tournament:'Tournament', category:'Category', ballType:'Ball Type', format:'Format', venue:'Venue' };
+  Object.entries(multiSelectState).forEach(([key, val]) => {
+    if (val.size > 0) {
+      [...val].forEach(v => {
+        chips.push(`<span class="filter-chip">${labels[key]}: ${v} <span class="remove" onclick="removeChip('${key}','${v.replace(/'/g,"\\'")}')">✕</span></span>`);
+      });
+    }
+  });
+  const from = document.getElementById('filterDateFrom').value;
+  const to   = document.getElementById('filterDateTo').value;
+  if (from) chips.push(`<span class="filter-chip">From: ${from} <span class="remove" onclick="document.getElementById('filterDateFrom').value='';filterAndRender()">✕</span></span>`);
+  if (to)   chips.push(`<span class="filter-chip">To: ${to} <span class="remove" onclick="document.getElementById('filterDateTo').value='';filterAndRender()">✕</span></span>`);
+  chipContainer.innerHTML = chips.join('');
+  const count = Object.values(multiSelectState).reduce((s,v) => s + v.size, 0) + (from ? 1 : 0) + (to ? 1 : 0);
+  const badge = document.getElementById('activeFilterCount');
+  if (count > 0) { badge.textContent = count; badge.style.display = ''; }
+  else badge.style.display = 'none';
+}
+
+function removeChip(key, value) {
+  multiSelectState[key].delete(value);
+  renderMultiSelectList(key, multiSelectOptions[key]);
+  updateMultiSelectTrigger(key);
+  updateActiveChips();
+  filterAndRender();
+}
+
+function resetAllFilters() {
+  Object.keys(multiSelectState).forEach(k => { multiSelectState[k].clear(); updateMultiSelectTrigger(k); });
+  document.getElementById('filterDateFrom').value = '';
+  document.getElementById('filterDateTo').value = '';
+  document.getElementById('searchInput').value = '';
+  filterAndRender();
+}
+
+function showCfgError(msg) { const el = document.getElementById('cfgError'); el.textContent = msg; el.style.display = 'block'; }
+
+// ─── SUPABASE QUERY ────────────────────────────────────────
+async function queryAll(table, params = '', onProgress = null) {
+  const BATCH = 10000;
+  let totalCount = 0;
+  try {
+    const countRes = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}&limit=1`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' }
+    });
+    const h = countRes.headers.get('content-range');
+    if (h) totalCount = parseInt(h.split('/')[1]) || 0;
+  } catch(e) {}
+
+  let offset = 0, allRows = [];
+  while (true) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}&limit=${BATCH}&offset=${offset}`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' }
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const batch = await res.json();
+    allRows = allRows.concat(batch);
+    if (onProgress) onProgress(allRows.length, totalCount);
+    if (batch.length < BATCH) break;
+    offset += BATCH;
+  }
+  return allRows;
+}
+
+async function queryOne(table, params = '') {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${params}&limit=1`, {
+    headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const rows = await res.json();
+  return rows[0] || null;
+}
+
+// ─── LOAD REFERENCE DATA ─────────────────────────────────
+async function loadReferenceData() {
+  try {
+    const seriesRows = await queryAll('tca_db_series_info', 'select=series_name,category,ball_type,max_overs');
+    seriesInfoMap = {};
+    seriesRows.forEach(r => {
+      seriesInfoMap[r.series_name] = {
+        category: r.category || '',
+        ball_type: r.ball_type || '',
+        max_overs: r.max_overs,
+        format_label: getFormatLabel(r.max_overs)
+      };
+    });
+
+    const matchRows = await queryAll('tca_db_match_info', 'select=match_id,match_date,venue');
+    matchInfoMap = {};
+    matchRows.forEach(r => {
+      matchInfoMap[String(r.match_id)] = {
+        match_date: r.match_date ? r.match_date.slice(0, 10) : '',
+        venue: r.venue || ''
+      };
+    });
+
+    try {
+      const playerRows = await queryAll('tca_db_player_info', 'select=*');
+      playerInfoMap = {};
+      playerRows.forEach(r => {
+        if (r.player_id) playerInfoMap[String(r.player_id)] = r;
+      });
+    } catch(e) {
+      console.warn('Could not load player info:', e.message);
+    }
+
+    buildFilterOptionsFromReference();
+  } catch(e) {
+    console.warn('Could not load reference data:', e.message);
+  }
+}
+
+function getFormatLabel(max_overs) {
+  if (!max_overs) return 'Unknown';
+  return `${parseInt(max_overs)} Overs`;
+}
+
+function buildFilterOptionsFromReference() {
+  buildMultiSelectList('tournament', Object.keys(seriesInfoMap).sort());
+  buildMultiSelectList('category', [...new Set(Object.values(seriesInfoMap).map(v => v.category).filter(Boolean))].sort());
+  buildMultiSelectList('ballType',  [...new Set(Object.values(seriesInfoMap).map(v => v.ball_type).filter(Boolean))].sort());
+  buildMultiSelectList('format',    [...new Set(Object.values(seriesInfoMap).map(v => v.format_label).filter(Boolean))].sort());
+  buildMultiSelectList('venue',     [...new Set(Object.values(matchInfoMap).map(v => v.venue).filter(Boolean))].sort());
+}
+
+// ─── FILTER HELPERS ────────────────────────────────────────
+function buildValidSets() {
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  const selVenues      = multiSelectState.venue;
+  const selFormats     = multiSelectState.format;
+  const selTournaments = multiSelectState.tournament;
+  const selCategories  = multiSelectState.category;
+  const selBallTypes   = multiSelectState.ballType;
+
+  const hasSeriesFilter = selCategories.size > 0 || selBallTypes.size > 0 || selFormats.size > 0 || selTournaments.size > 0;
+  const hasMatchFilter  = dateFrom || dateTo || selVenues.size > 0;
+
+  let validSeriesNames = null;
+  if (hasSeriesFilter) {
+    validSeriesNames = new Set();
+    Object.entries(seriesInfoMap).forEach(([name, info]) => {
+      if (selTournaments.size > 0 && !selTournaments.has(name)) return;
+      if (selCategories.size > 0 && !selCategories.has(info.category)) return;
+      if (selBallTypes.size > 0 && !selBallTypes.has(info.ball_type)) return;
+      if (selFormats.size > 0 && !selFormats.has(info.format_label)) return;
+      validSeriesNames.add(name);
+    });
+  }
+
+  let validMatchIds = null;
+  if (hasMatchFilter) {
+    validMatchIds = new Set();
+    Object.entries(matchInfoMap).forEach(([matchId, info]) => {
+      if (dateFrom && info.match_date < dateFrom) return;
+      if (dateTo   && info.match_date > dateTo)   return;
+      if (selVenues.size > 0 && !selVenues.has(info.venue)) return;
+      validMatchIds.add(matchId);
+    });
+  }
+
+  return { validMatchIds, validSeriesNames };
+}
+
+function applyFilters(tab) {
+  const raw = rawDataCache[tab];
+  if (!raw) return;
+  const { validMatchIds, validSeriesNames } = buildValidSets();
+  allData[tab] = raw.filter(r => {
+    if (validMatchIds    && !validMatchIds.has(String(r.match_id))) return false;
+    if (validSeriesNames && !validSeriesNames.has(r.event_name))    return false;
+    return true;
+  });
+}
+
+// ─── FILTER AND RENDER ────────────────────────────────────
+function filterAndRender() {
+  if (currentTab === 'allround') {
+    if (!rawDataCache.batting || !rawDataCache.bowling) { loadData(true); return; }
+  } else if (currentTab === 'fielding') {
+    if (!rawDataCache.batting) { loadData(true); return; }
+  } else {
+    if (!rawDataCache[currentTab]) { loadData(true); return; }
+  }
+  updateActiveChips();
+  selectedPlayerIds.clear();
+  updateSelectionBar();
+  if (currentTab === 'allround') {
+    processAllRound();
+  } else if (currentTab === 'fielding') {
+    processFieldingFromBatting();
+  } else {
+    applyFilters(currentTab);
+    if (currentTab === 'batting') processBatting();
+    else processBowling();
+  }
+}
+
+// ─── LOAD DATA ────────────────────────────────────────────
+async function loadData(forceFetch = false) {
+  if (!SUPABASE_URL || !SUPABASE_KEY ||
+      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+
+  updateActiveChips();
+  selectedPlayerIds.clear();
+  updateSelectionBar();
+
+  try {
+    if (currentTab === 'allround') {
+      const needBat  = forceFetch || !rawDataCache.batting;
+      const needBowl = forceFetch || !rawDataCache.bowling;
+      if (needBat || needBowl) { showLoading(); setConnStatus('loading'); }
+      if (needBat)  rawDataCache.batting  = await queryAll('tca_db_scorecard_batting',  'select=*', (c, t) => updateLoadingProgress(c, t, 'batting'));
+      if (needBowl) rawDataCache.bowling  = await queryAll('tca_db_scorecard_bowling',  'select=*', (c, t) => updateLoadingProgress(c, t, 'bowling'));
+      setConnStatus('connected');
+      processAllRound();
+
+    } else if (currentTab === 'fielding') {
+      const needBat = forceFetch || !rawDataCache.batting;
+      if (needBat) {
+        showLoading(); setConnStatus('loading');
+        rawDataCache.batting = await queryAll('tca_db_scorecard_batting', 'select=*', (c, t) => updateLoadingProgress(c, t, 'batting'));
+        setConnStatus('connected');
+      }
+      processFieldingFromBatting();
+
+    } else {
+      if (forceFetch || !rawDataCache[currentTab]) {
+        const table = currentTab === 'batting' ? 'tca_db_scorecard_batting' : 'tca_db_scorecard_bowling';
+        showLoading(); setConnStatus('loading');
+        rawDataCache[currentTab] = await queryAll(table, 'select=*', (c, t) => updateLoadingProgress(c, t, currentTab));
+        setConnStatus('connected');
+      }
+      applyFilters(currentTab);
+      if (currentTab === 'batting') processBatting();
+      else processBowling();
+    }
+  } catch(e) {
+    setConnStatus('error');
+    showError(e.message);
+  }
+}
+
+// ─── PROCESS BATTING ──────────────────────────────────────
+function processBatting(dataOverride) {
+  const rows = dataOverride || allData['batting'];
+  if (!rows) return;
+
+  const byPlayer = {};
+  rows.forEach(row => {
+    const id = row.batter_id; if (!id) return;
+    if (!byPlayer[id]) byPlayer[id] = {
+      id, name: row.batter_name,
+      innings: 0, runs: 0, balls: 0,
+      fours: 0, sixes: 0, notOuts: 0,
+      highScore: 0, highScoreNotOut: false,
+      fifties: 0, hundreds: 0
+    };
+    const p = byPlayer[id];
+    p.innings++;
+    p.runs  += row.runs  || 0;
+    p.balls += row.balls || 0;
+    p.fours += row.fours || 0;
+    p.sixes += row.sixes || 0;
+    const dt = (row.dismissal_type || '').toLowerCase().replace(/[\s_-]/g, '');
+    const isNotOut = dt === 'notout' || dt === '' || dt === 'retired' || dt === 'retiredhurt';
+    if (isNotOut) p.notOuts++;
+    if (row.runs >= 100) p.hundreds++;
+    else if (row.runs >= 50) p.fifties++;
+    const runs = row.runs || 0;
+    if (runs > p.highScore || (runs === p.highScore && isNotOut)) {
+      p.highScore = runs;
+      p.highScoreNotOut = isNotOut;
+    }
+  });
+
+  const processed = Object.values(byPlayer).map(p => {
+    const dismissals = p.innings - p.notOuts;
+    const avg = dismissals > 0 ? +(p.runs / dismissals).toFixed(2) : (p.runs > 0 ? p.runs : 0);
+    const sr  = p.balls > 0   ? +((p.runs / p.balls) * 100).toFixed(2) : 0;
+    return { ...p, avg, sr };
+  });
+
+  if (!dataOverride) {
+    const total = processed.reduce((s, r) => s + r.runs, 0);
+    renderSummary([
+      { label: 'Total Players', value: processed.length, sub: 'in dataset' },
+      { label: 'Total Runs', value: total.toLocaleString(), sub: 'across all innings' },
+      { label: 'Centuries', value: processed.reduce((s, r) => s + r.hundreds, 0), sub: '100+ scores' },
+      { label: 'Top Avg', value: processed.filter(r => r.innings >= 3).sort((a, b) => b.avg - a.avg)[0]?.avg || '-', sub: 'min 3 innings' },
+    ]);
+    currentSort = { col: 'runs', dir: 'desc' };
+    window._processedData = processed;
+    renderTable();
+  }
+  return processed;
+}
+
+// ─── PROCESS BOWLING ──────────────────────────────────────
+function processBowling(dataOverride) {
+  const rows = dataOverride || allData['bowling'];
+  if (!rows) return;
+
+  const byPlayer = {};
+  rows.forEach(row => {
+    const id = row.bowler_id; if (!id) return;
+    if (!byPlayer[id]) byPlayer[id] = {
+      id, name: row.bowler_name,
+      matches: 0, overs: 0, runs: 0, wickets: 0,
+      maidens: 0, wides: 0, noBalls: 0,
+      fiveWickets: 0, bestWkts: 0, bestRuns: 999
+    };
+    const p = byPlayer[id];
+    p.matches++;
+    p.overs    += row.overs    || 0;
+    p.runs     += row.runs     || 0;
+    p.wickets  += row.wickets  || 0;
+    p.maidens  += row.maidens  || 0;
+    p.wides    += row.wides    || 0;
+    p.noBalls  += row.no_balls || 0;
+    if (row.wickets >= 5) p.fiveWickets++;
+    if (row.wickets > p.bestWkts || (row.wickets === p.bestWkts && row.runs < p.bestRuns)) {
+      p.bestWkts = row.wickets; p.bestRuns = row.runs;
+    }
+  });
+
+  const processed = Object.values(byPlayer).map(p => {
+    const avg = p.wickets > 0 ? +(p.runs / p.wickets).toFixed(2) : null;
+    const eco = p.overs > 0   ? +(p.runs / p.overs).toFixed(2) : 0;
+    const sr  = p.wickets > 0 ? +((p.overs * 6) / p.wickets).toFixed(2) : null;
+    return { ...p, avg, eco, sr, best: `${p.bestWkts}/${p.bestRuns}` };
+  });
+
+  if (!dataOverride) {
+    renderSummary([
+      { label: 'Total Bowlers', value: processed.length, sub: 'in dataset' },
+      { label: 'Total Wickets', value: processed.reduce((s, r) => s + r.wickets, 0), sub: 'across all games' },
+      { label: 'Five-Fors', value: processed.reduce((s, r) => s + r.fiveWickets, 0), sub: '5+ wickets in an innings' },
+      { label: 'Best Economy', value: processed.filter(r => r.overs >= 5).sort((a, b) => a.eco - b.eco)[0]?.eco || '-', sub: 'min 5 overs' },
+    ]);
+    currentSort = { col: 'wickets', dir: 'desc' };
+    window._processedData = processed;
+    renderTable();
+  }
+  return processed;
+}
+
+// ─── PROCESS FIELDING ─────────────────────────────────────
+function processFieldingFromBatting() {
+  applyFilters('batting');
+  const rows = allData['batting'] || [];
+
+  function normDT(raw) {
+    if (!raw) return '';
+    return raw.toLowerCase().replace(/[\s_\-]/g, '');
+  }
+
+  const CAUGHT_TYPES   = new Set(['caught', 'c', 'ct']);
+  const KEEPER_TYPES   = new Set(['caughtbehind', 'wktkprcatch', 'keepercatch', 'caughtbehindwicket', 'cbw', 'kprcatch', 'catchkeeper']);
+  const STUMPED_TYPES  = new Set(['stumped', 'st']);
+  const RUNOUT_TYPES   = new Set(['runout', 'ro', 'run-out']);
+
+  const byFielder = {};
+
+  function ensureFielder(id, name) {
+    if (!byFielder[id]) byFielder[id] = {
+      id: String(id),
+      name: name || (playerInfoMap[String(id)] ? getPlayerFullName(String(id)) : `Player ${id}`),
+      catches: 0, catchesWk: 0, stumpings: 0, runOuts: 0,
+    };
+    return byFielder[id];
+  }
+
+  rows.forEach(row => {
+    const dt = normDT(row.dismissal_type);
+    if (!dt) return;
+    const fid = row.fielder_id;
+    const fid2 = row.fielder_id2;
+    const fname = row.fielder_name || null;
+    if (CAUGHT_TYPES.has(dt)) { if (fid) ensureFielder(fid, fname).catches++; }
+    else if (KEEPER_TYPES.has(dt))  { if (fid) ensureFielder(fid, fname).catchesWk++; }
+    else if (STUMPED_TYPES.has(dt)) { if (fid) ensureFielder(fid, fname).stumpings++; }
+    else if (RUNOUT_TYPES.has(dt))  {
+      if (fid)  ensureFielder(fid, fname).runOuts++;
+      if (fid2) ensureFielder(fid2, null).runOuts++;
+    }
+  });
+
+  Object.values(byFielder).forEach(p => {
+    const info = playerInfoMap[p.id];
+    if (info) p.name = getPlayerFullName(p.id);
+  });
+
+  const processed = Object.values(byFielder).map(p => ({
+    ...p,
+    totalDismissals: p.catches + p.catchesWk + p.stumpings + p.runOuts,
+  }));
+
+  renderSummary([
+    { label: 'Fielders', value: processed.length, sub: 'contributed dismissals' },
+    { label: 'Total Dismissals', value: processed.reduce((s, r) => s + r.totalDismissals, 0), sub: 'ct + st + ro' },
+    { label: 'Catches', value: processed.reduce((s, r) => s + r.catches + r.catchesWk, 0), sub: 'outfield + keeper' },
+    { label: 'Run Outs', value: processed.reduce((s, r) => s + r.runOuts, 0), sub: 'direct + indirect' },
+  ]);
+
+  currentSort = { col: 'totalDismissals', dir: 'desc' };
+  window._processedData = processed;
+  renderTable();
+}
+
+// ─── PROCESS ALL-ROUND ────────────────────────────────────
+function processAllRound() {
+  applyFilters('batting');
+  applyFilters('bowling');
+
+  const batData  = allData['batting']  || [];
+  const bowlData = allData['bowling']  || [];
+
+  const batMap  = {};
+  const bowlMap = {};
+
+  const batProcessed = processBatting(batData) || [];
+  batProcessed.forEach(p => { batMap[p.id] = p; });
+
+  const bowlProcessed = processBowling(bowlData) || [];
+  bowlProcessed.forEach(p => { bowlMap[p.id] = p; });
+
+  applyFilters('batting');
+  const fieldRows = allData['batting'] || [];
+  function normDT(raw) { return !raw ? '' : raw.toLowerCase().replace(/[\s_\-]/g, ''); }
+  const CAUGHT_TYPES  = new Set(['caught','c','ct']);
+  const KEEPER_TYPES  = new Set(['caughtbehind','wktkprcatch','keepercatch','caughtbehindwicket','cbw','kprcatch','catchkeeper']);
+  const STUMPED_TYPES = new Set(['stumped','st']);
+  const RUNOUT_TYPES  = new Set(['runout','ro','run-out']);
+  const fieldMap = {};
+  fieldRows.forEach(row => {
+    const dt = normDT(row.dismissal_type); if (!dt) return;
+    const fid = row.fielder_id; if (!fid) return;
+    const sid = String(fid);
+    if (!fieldMap[sid]) fieldMap[sid] = { catches: 0, catchesWk: 0, stumpings: 0, runOuts: 0 };
+    if (CAUGHT_TYPES.has(dt))  fieldMap[sid].catches++;
+    else if (KEEPER_TYPES.has(dt)) fieldMap[sid].catchesWk++;
+    else if (STUMPED_TYPES.has(dt)) fieldMap[sid].stumpings++;
+    else if (RUNOUT_TYPES.has(dt)) fieldMap[sid].runOuts++;
+    const fid2 = row.fielder_id2;
+    if (RUNOUT_TYPES.has(dt) && fid2) {
+      const sid2 = String(fid2);
+      if (!fieldMap[sid2]) fieldMap[sid2] = { catches: 0, catchesWk: 0, stumpings: 0, runOuts: 0 };
+      fieldMap[sid2].runOuts++;
+    }
+  });
+
+  const allIds = new Set([...Object.keys(batMap), ...Object.keys(bowlMap), ...Object.keys(fieldMap)]);
+  const combined = [];
+  allIds.forEach(id => {
+    const b  = batMap[id]  || {};
+    const bw = bowlMap[id] || {};
+    const f  = fieldMap[id] || {};
+    combined.push({
+      id,
+      name: b.name || bw.name || getPlayerFullName(id) || 'Unknown',
+      batInnings: b.innings   || 0,
+      batRuns:    b.runs      || 0,
+      batAvg:     b.avg       ?? null,
+      batSR:      b.sr        ?? null,
+      batHS:      b.highScore || 0,
+      bat50s:     b.fifties   || 0,
+      bat100s:    b.hundreds  || 0,
+      bowlInnings: bw.matches  || 0,
+      bowlWkts:    bw.wickets  || 0,
+      bowlAvg:     bw.avg      ?? null,
+      bowlEco:     bw.eco      ?? null,
+      bowlBest:    bw.best     || '-',
+      bowl5W:      bw.fiveWickets || 0,
+      catches:     (f.catches || 0) + (f.catchesWk || 0),
+      stumpings:   f.stumpings || 0,
+      runOuts:     f.runOuts   || 0,
+      fieldDis:    (f.catches || 0) + (f.catchesWk || 0) + (f.stumpings || 0) + (f.runOuts || 0),
+    });
+  });
+
+  renderSummary([
+    { label: 'Total Players', value: combined.length, sub: 'bat + bowl combined' },
+    { label: 'Total Runs', value: combined.reduce((s, p) => s + p.batRuns, 0).toLocaleString(), sub: 'all batting innings' },
+    { label: 'Total Wickets', value: combined.reduce((s, p) => s + p.bowlWkts, 0), sub: 'all bowling innings' },
+    { label: 'Double Contribs', value: combined.filter(p => p.batRuns >= 100 && p.bowlWkts >= 5).length, sub: '100+ runs & 5+ wkts' },
+  ]);
+
+  currentSort = { col: 'batRuns', dir: 'desc' };
+  window._processedData = combined;
+  renderTable();
+}
+
+// ─── RENDER TABLE ─────────────────────────────────────────
+function renderTable() {
+  if (!window._processedData) return;
+  let data = [...window._processedData];
+
+  if (currentTab === 'batting') {
+    const min = parseInt(document.getElementById('filterMinInnings').value);
+    data = data.filter(r => r.innings >= min);
+  } else if (currentTab === 'bowling') {
+    const min = parseInt(document.getElementById('filterMinOvers').value);
+    data = data.filter(r => r.overs >= min);
+  } else if (currentTab === 'allround') {
+    const minInn = parseInt(document.getElementById('filterArMinInnings').value);
+    data = data.filter(r => r.batInnings >= minInn);
+  } else if (currentTab === 'fielding') {
+    const min = parseInt(document.getElementById('filterMinDismissals').value);
+    data = data.filter(r => r.totalDismissals >= min);
+  }
+
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  if (search) data = data.filter(r => r.name?.toLowerCase().includes(search));
+
+  if (currentSort.col) {
+    data.sort((a, b) => {
+      const va = a[currentSort.col], vb = b[currentSort.col];
+      if (va === null && vb === null) return 0;
+      if (va === null) return 1; if (vb === null) return -1;
+      if (typeof va === 'string') return currentSort.dir === 'desc' ? vb.localeCompare(va) : va.localeCompare(vb);
+      return currentSort.dir === 'desc' ? vb - va : va - vb;
+    });
+  }
+
+  const total = data.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  if (currentPage > totalPages) currentPage = 1;
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const pageData = data.slice(start, start + PAGE_SIZE);
+  window._filteredData = data;
+
+  const container = document.getElementById('tableContainer');
+  if (data.length === 0) {
+    container.innerHTML = `<div class="state-msg"><div class="icon">🔍</div><h3>No results</h3><p>Try adjusting your filters.</p></div>`;
+    return;
+  }
+
+  if (currentTab === 'batting')      renderBattingTable(pageData, container, start);
+  else if (currentTab === 'bowling') renderBowlingTable(pageData, container, start);
+  else if (currentTab === 'allround') renderAllRoundTable(pageData, container, start);
+  else if (currentTab === 'fielding') renderFieldingTable(pageData, container, start);
+
+  renderPagination(total, totalPages, container);
+}
+
+function playerNameCell(playerId, playerName) {
+  const esc = (playerName || 'Unknown').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+  const idEsc = String(playerId || '').replace(/"/g, '&quot;');
+  return `<span class="player-link" onclick="openPlayerPanel('${idEsc}', '${esc.replace(/'/g,"\\'")}'); event.stopPropagation();">${esc}</span>`;
+}
+
+function renderBattingTable(data, container, offset) {
+  document.getElementById('tableTitle').textContent = 'BATTING LEADERS';
+  document.getElementById('batMinGroup').style.display    = '';
+  document.getElementById('bowlMinGroup').style.display   = 'none';
+  document.getElementById('allroundMinGroup').style.display = 'none';
+  document.getElementById('fieldMinGroup').style.display  = 'none';
+  document.getElementById('colLegend').style.display      = 'none';
+
+  const cols = [
+    { key: null, label: '✓', noSort: true },
+    { key: null, label: '#', noSort: true },
+    { key: 'name', label: 'Player', noSort: true },
+    { key: 'innings', label: 'Inn' },
+    { key: 'runs', label: 'Runs' },
+    { key: 'highScore', label: 'HS' },
+    { key: 'avg', label: 'Avg' },
+    { key: 'sr', label: 'SR' },
+    { key: 'fours', label: '4s' },
+    { key: 'sixes', label: '6s' },
+    { key: 'fifties', label: '50s' },
+    { key: 'hundreds', label: '100s' },
+  ];
+
+  container.innerHTML = buildTable(cols, data, offset, (r, i) => [
+    `<input type="checkbox" class="row-check" ${selectedPlayerIds.has(r.id) ? 'checked' : ''} onchange="togglePlayerSelect('${r.id}', this.checked)">`,
+    `<span class="rank">${offset + i + 1}</span>`,
+    playerNameCell(r.id, r.name),
+    r.innings,
+    `<span class="highlight">${r.runs}</span>`,
+    r.highScoreNotOut ? `${r.highScore}*` : r.highScore,
+    r.avg !== null ? colorNum(r.avg, 25, 40) : '-',
+    r.sr  !== null ? colorNum(r.sr, 100, 130) : '-',
+    r.fours, r.sixes, r.fifties, r.hundreds,
+  ], r => selectedPlayerIds.has(r.id));
+}
+
+function renderBowlingTable(data, container, offset) {
+  document.getElementById('tableTitle').textContent = 'BOWLING LEADERS';
+  document.getElementById('batMinGroup').style.display    = 'none';
+  document.getElementById('bowlMinGroup').style.display   = '';
+  document.getElementById('allroundMinGroup').style.display = 'none';
+  document.getElementById('fieldMinGroup').style.display  = 'none';
+  document.getElementById('colLegend').style.display      = 'none';
+
+  const cols = [
+    { key: null, label: '✓', noSort: true },
+    { key: null, label: '#', noSort: true },
+    { key: 'name', label: 'Player', noSort: true },
+    { key: 'matches', label: 'Inn' },
+    { key: 'overs', label: 'Overs' },
+    { key: 'wickets', label: 'Wkts' },
+    { key: 'runs', label: 'Runs' },
+    { key: 'avg', label: 'Avg' },
+    { key: 'eco', label: 'Econ' },
+    { key: 'sr', label: 'SR' },
+    { key: 'maidens', label: 'Mdn' },
+    { key: 'best', label: 'Best', noSort: true },
+    { key: 'fiveWickets', label: '5W' },
+  ];
+
+  container.innerHTML = buildTable(cols, data, offset, (r, i) => [
+    `<input type="checkbox" class="row-check" ${selectedPlayerIds.has(r.id) ? 'checked' : ''} onchange="togglePlayerSelect('${r.id}', this.checked)">`,
+    `<span class="rank">${offset + i + 1}</span>`,
+    playerNameCell(r.id, r.name),
+    r.matches,
+    r.overs.toFixed(1),
+    `<span class="highlight">${r.wickets}</span>`,
+    r.runs,
+    r.avg !== null ? colorNumInv(r.avg, 20, 35) : '-',
+    r.eco !== null ? colorNumInv(r.eco, 6, 9)   : '-',
+    r.sr  !== null ? r.sr : '-',
+    r.maidens, r.best, r.fiveWickets,
+  ], r => selectedPlayerIds.has(r.id));
+}
+
+function renderFieldingTable(data, container, offset) {
+  document.getElementById('tableTitle').textContent = 'FIELDING LEADERS';
+  document.getElementById('batMinGroup').style.display    = 'none';
+  document.getElementById('bowlMinGroup').style.display   = 'none';
+  document.getElementById('allroundMinGroup').style.display = 'none';
+  document.getElementById('fieldMinGroup').style.display  = '';
+  document.getElementById('colLegend').style.display      = 'none';
+
+  const cols = [
+    { key: null, label: '✓', noSort: true },
+    { key: null, label: '#', noSort: true },
+    { key: 'name', label: 'Player', noSort: true },
+    { key: 'totalDismissals', label: 'Total' },
+    { key: 'catches', label: 'Ct (Field)' },
+    { key: 'catchesWk', label: 'Ct (WK)' },
+    { key: 'stumpings', label: 'St' },
+    { key: 'runOuts', label: 'RO' },
+  ];
+
+  container.innerHTML = buildTable(cols, data, offset, (r, i) => [
+    `<input type="checkbox" class="row-check" ${selectedPlayerIds.has(r.id) ? 'checked' : ''} onchange="togglePlayerSelect('${r.id}', this.checked)">`,
+    `<span class="rank">${offset + i + 1}</span>`,
+    playerNameCell(r.id, r.name),
+    `<span class="highlight-green">${r.totalDismissals}</span>`,
+    r.catches, r.catchesWk, r.stumpings, r.runOuts,
+  ], r => selectedPlayerIds.has(r.id));
+}
+
+function renderAllRoundTable(data, container, offset) {
+  document.getElementById('tableTitle').textContent = 'ALL-ROUND STATS';
+  document.getElementById('batMinGroup').style.display    = 'none';
+  document.getElementById('bowlMinGroup').style.display   = 'none';
+  document.getElementById('allroundMinGroup').style.display = '';
+  document.getElementById('fieldMinGroup').style.display  = 'none';
+  document.getElementById('colLegend').style.display      = 'flex';
+
+  const cols = [
+    { key: null,          label: '✓',    noSort: true, cls: '' },
+    { key: null,          label: '#',    noSort: true, cls: '' },
+    { key: 'name',        label: 'Player', noSort: true, cls: '' },
+    { key: 'batInnings',  label: 'Inn',  cls: 'col-group-bat col-sep' },
+    { key: 'batRuns',     label: 'Runs', cls: 'col-group-bat' },
+    { key: 'batAvg',      label: 'Avg',  cls: 'col-group-bat' },
+    { key: 'batSR',       label: 'SR',   cls: 'col-group-bat' },
+    { key: 'bat50s',      label: '50s',  cls: 'col-group-bat' },
+    { key: 'bat100s',     label: '100s', cls: 'col-group-bat' },
+    { key: 'bowlInnings', label: 'Inn',  cls: 'col-group-bowl col-sep' },
+    { key: 'bowlWkts',    label: 'Wkts', cls: 'col-group-bowl' },
+    { key: 'bowlAvg',     label: 'Avg',  cls: 'col-group-bowl' },
+    { key: 'bowlEco',     label: 'Econ', cls: 'col-group-bowl' },
+    { key: 'bowlBest',    label: 'Best', cls: 'col-group-bowl', noSort: true },
+    { key: 'bowl5W',      label: '5W',   cls: 'col-group-bowl' },
+    { key: 'catches',     label: 'Ct',   cls: 'col-group-field col-sep' },
+    { key: 'stumpings',   label: 'St',   cls: 'col-group-field' },
+    { key: 'runOuts',     label: 'RO',   cls: 'col-group-field' },
+    { key: 'fieldDis',    label: 'Total', cls: 'col-group-field' },
+  ];
+
+  container.innerHTML = buildTable(cols, data, offset, (r, i) => [
+    `<input type="checkbox" class="row-check" ${selectedPlayerIds.has(r.id) ? 'checked' : ''} onchange="togglePlayerSelect('${r.id}', this.checked)">`,
+    `<span class="rank">${offset + i + 1}</span>`,
+    playerNameCell(r.id, r.name),
+    r.batInnings,
+    `<span class="highlight">${r.batRuns}</span>`,
+    r.batAvg !== null ? colorNum(r.batAvg, 25, 40) : '-',
+    r.batSR  !== null ? colorNum(r.batSR, 100, 130) : '-',
+    r.bat50s, r.bat100s,
+    r.bowlInnings,
+    `<span class="highlight-blue">${r.bowlWkts}</span>`,
+    r.bowlAvg !== null ? colorNumInv(r.bowlAvg, 20, 35) : '-',
+    r.bowlEco !== null ? colorNumInv(r.bowlEco, 6, 9)   : '-',
+    r.bowlBest, r.bowl5W,
+    `<span class="highlight-green">${r.catches}</span>`,
+    r.stumpings, r.runOuts,
+    `<span class="highlight-green">${r.fieldDis}</span>`,
+  ], r => selectedPlayerIds.has(r.id), cols);
+}
+
+function buildTable(cols, data, offset, rowFn, isSelectedFn, colDefs) {
+  const defs = colDefs || cols;
+  const allSelected = data.every(r => selectedPlayerIds.has(r.id));
+
+  const allHeadCells = defs.map((c, idx) => {
+    const cls = c.cls ? ` ${c.cls}` : '';
+    if (idx === 0) {
+      return `<th class="no-sort${cls}"><input type="checkbox" class="row-check" ${allSelected && data.length > 0 ? 'checked' : ''} onchange="togglePageSelectAll(this.checked)" title="Select all on page"></th>`;
+    }
+    if (!c.key || c.noSort) return `<th class="no-sort${cls}">${c.label}</th>`;
+    const sorted = currentSort.col === c.key;
+    const dir = sorted ? (currentSort.dir === 'desc' ? '↓' : '↑') : '↕';
+    return `<th class="${sorted ? 'sorted' : ''}${cls}" onclick="sortBy('${c.key}')">${c.label} <span class="sort-icon">${dir}</span></th>`;
+  }).join('');
+
+  const bodyRows = data.map((r, i) => {
+    const values = rowFn(r, i);
+    const cells = values.map((v, ci) => {
+      const cls = defs[ci]?.cls ? ` class="${defs[ci].cls}"` : '';
+      return `<td${cls}>${v}</td>`;
+    }).join('');
+    const sel = isSelectedFn ? isSelectedFn(r) : false;
+    return `<tr class="${sel ? 'selected-row' : ''}">${cells}</tr>`;
+  }).join('');
+
+  return `<div style="overflow-x:auto"><table><thead><tr>${allHeadCells}</tr></thead><tbody>${bodyRows}</tbody></table></div>`;
+}
+
+function colorNum(val, low, high) {
+  if (val >= high) return `<span class="good">${val}</span>`;
+  if (val < low)   return `<span class="bad">${val}</span>`;
+  return val;
+}
+
+function colorNumInv(val, low, high) {
+  if (val <= low)  return `<span class="good">${val}</span>`;
+  if (val > high)  return `<span class="bad">${val}</span>`;
+  return val;
+}
+
+function sortBy(col) {
+  if (currentSort.col === col) currentSort.dir = currentSort.dir === 'desc' ? 'asc' : 'desc';
+  else { currentSort.col = col; currentSort.dir = 'desc'; }
+  currentPage = 1;
+  renderTable();
+}
+
+// ─── PLAYER SELECTION ─────────────────────────────────────
+function togglePlayerSelect(id, checked) {
+  if (checked) selectedPlayerIds.add(id);
+  else selectedPlayerIds.delete(id);
+  updateSelectionBar();
+  renderTable();
+}
+
+function togglePageSelectAll(checked) {
+  const pageData = window._filteredData
+    ? window._filteredData.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+    : [];
+  pageData.forEach(r => {
+    if (checked) selectedPlayerIds.add(r.id);
+    else selectedPlayerIds.delete(r.id);
+  });
+  updateSelectionBar();
+  renderTable();
+}
+
+function clearSelection() {
+  selectedPlayerIds.clear();
+  updateSelectionBar();
+  renderTable();
+}
+
+function updateSelectionBar() {
+  const count = selectedPlayerIds.size;
+  const bar = document.getElementById('selectionBar');
+  const info = document.getElementById('selectionInfo');
+  const csvBtn = document.getElementById('exportSelectedCSVBtn');
+  const pdfBtn = document.getElementById('exportSelectedPDFBtn');
+  if (count > 0) {
+    bar.classList.add('visible');
+    info.textContent = `${count} player${count > 1 ? 's' : ''} selected`;
+    if (csvBtn) csvBtn.style.display = '';
+    if (pdfBtn) pdfBtn.style.display = '';
+  } else {
+    bar.classList.remove('visible');
+    if (csvBtn) csvBtn.style.display = 'none';
+    if (pdfBtn) pdfBtn.style.display = 'none';
+  }
+}
+
+// ─── PAGINATION ───────────────────────────────────────────
+function renderPagination(total, totalPages, container) {
+  const start = (currentPage - 1) * PAGE_SIZE + 1;
+  const end   = Math.min(currentPage * PAGE_SIZE, total);
+  const pages = [];
+  for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) pages.push(i);
+
+  const pag = document.createElement('div');
+  pag.className = 'pagination';
+  pag.innerHTML = `
+    <span class="page-info">Showing ${start}–${end} of ${total} players</span>
+    <div class="page-btns">
+      <button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
+      ${pages.map(p => `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`).join('')}
+      <button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
+    </div>
+  `;
+  container.appendChild(pag);
+}
+
+function goPage(p) { currentPage = p; renderTable(); }
+
+// ─── SUMMARY CARDS ────────────────────────────────────────
+function renderSummary(cards) {
+  document.getElementById('summaryCards').innerHTML = cards.map(c => `
+    <div class="stat-card">
+      <div class="label">${c.label}</div>
+      <div class="value">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>
+  `).join('');
+}
+
+// ─── TAB SWITCH ───────────────────────────────────────────
+function switchTab(tab) {
+  currentTab = tab;
+  currentPage = 1;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active',
+      (i === 0 && tab === 'batting') ||
+      (i === 1 && tab === 'bowling') ||
+      (i === 2 && tab === 'allround') ||
+      (i === 3 && tab === 'fielding')
+    );
+  });
+  window._processedData = null;
+  selectedPlayerIds.clear();
+  updateSelectionBar();
+  loadData(false);
+}
+
+// ─── STATUS ───────────────────────────────────────────────
+function setConnStatus(state) {
+  const dot = document.getElementById('connDot');
+  const lbl = document.getElementById('connLabel');
+  dot.className = 'conn-dot';
+  if (state === 'connected') { dot.classList.add('connected'); lbl.textContent = 'Connected'; }
+  else if (state === 'error') { dot.classList.add('error'); lbl.textContent = 'Error'; }
+  else { lbl.textContent = 'Loading…'; }
+}
+
+function showLoading() {
+  document.getElementById('tableContainer').innerHTML = `
+    <div class="state-msg">
+      <div class="spinner"></div>
+      <h3>Loading data…</h3>
+      <p>Fetching all rows from Supabase</p>
+      <p class="fetch-progress" id="fetchProgress"></p>
+    </div>`;
+  document.getElementById('summaryCards').innerHTML = '';
+}
+
+function updateLoadingProgress(current, total, label) {
+  const el = document.getElementById('fetchProgress');
+  if (el) {
+    const prefix = label ? `[${label}] ` : '';
+    if (total > 0) {
+      const pct = Math.round((current / total) * 100);
+      el.textContent = `${prefix}${pct}% loaded (${current.toLocaleString()} / ${total.toLocaleString()} rows)`;
+    } else {
+      el.textContent = `${prefix}${current.toLocaleString()} rows fetched…`;
+    }
+  }
+}
+
+function showError(msg) {
+  document.getElementById('tableContainer').innerHTML = `
+    <div class="state-msg">
+      <div class="icon">⚠️</div>
+      <h3>Connection Error</h3>
+      <p>${msg}</p>
+      <br>
+      <button class="btn btn-primary" onclick="openConfig()">⚙ Check Config</button>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 1: EXPORT HISTORY
+// ════════════════════════════════════════════════════════════
+
+const HISTORY_LS_KEY = 'tca_export_history';
+const HISTORY_MAX    = 50;
+const SUPABASE_HISTORY_TABLE = 'tca_export_history';
+
+function loadExportHistoryFromStorage() {
+  try {
+    const raw = localStorage.getItem(HISTORY_LS_KEY);
+    exportHistory = raw ? JSON.parse(raw) : [];
+  } catch(e) {
+    exportHistory = [];
+  }
+  updateHistoryBadge();
+}
+
+function saveExportHistoryToStorage() {
+  try {
+    localStorage.setItem(HISTORY_LS_KEY, JSON.stringify(exportHistory.slice(0, HISTORY_MAX)));
+  } catch(e) {
+    console.warn('Could not save history to localStorage:', e);
+  }
+  updateHistoryBadge();
+}
+
+async function saveHistoryToSupabase(record) {
+  if (!SUPABASE_URL || !SUPABASE_KEY ||
+      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+  try {
+    const payload = {
+      export_id:         record.id,
+      exported_at:       record.timestamp,
+      tab:               record.tab,
+      title:             record.title,
+      subtitle:          record.subtitle || '',
+      filters_json:      JSON.stringify(record.filters),
+      player_ids_json:   JSON.stringify(record.playerIds),
+      player_names_json: JSON.stringify(record.playerNames),
+      player_count:      record.playerCount,
+      export_type:       record.exportType,
+      selected_only:     record.selectedOnly,
+    };
+    await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_HISTORY_TABLE}`, {
+      method: 'POST',
+      headers: {
+        'apikey':        SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type':  'application/json',
+        'Prefer':        'resolution=ignore-duplicates',
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch(e) {}
+}
+
+async function syncHistoryFromSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_KEY ||
+      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/${SUPABASE_HISTORY_TABLE}?select=*&order=exported_at.desc&limit=50`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    if (!res.ok) return;
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) return;
+    const existingIds = new Set(exportHistory.map(r => r.id));
+    let added = 0;
+    rows.forEach(row => {
+      if (existingIds.has(row.export_id)) return;
+      try {
+        exportHistory.push({
+          id:           row.export_id,
+          timestamp:    row.exported_at,
+          tab:          row.tab,
+          title:        row.title,
+          subtitle:     row.subtitle,
+          filters:      JSON.parse(row.filters_json || '{}'),
+          playerIds:    JSON.parse(row.player_ids_json  || '[]'),
+          playerNames:  JSON.parse(row.player_names_json || '[]'),
+          playerCount:  row.player_count,
+          exportType:   row.export_type,
+          selectedOnly: row.selected_only,
+          fromSupabase: true,
+        });
+        added++;
+      } catch(e) {}
+    });
+    if (added > 0) {
+      exportHistory.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      saveExportHistoryToStorage();
+    }
+  } catch(e) {}
+}
+
+function buildHistoryRecord(title, subtitle, exportType, selectedOnly, exportedData) {
+  const filterSnapshot = {
+    tournament: [...multiSelectState.tournament],
+    category:   [...multiSelectState.category],
+    ballType:   [...multiSelectState.ballType],
+    format:     [...multiSelectState.format],
+    venue:      [...multiSelectState.venue],
+    dateFrom:   document.getElementById('filterDateFrom').value,
+    dateTo:     document.getElementById('filterDateTo').value,
+  };
+  const playerIds   = exportedData.map(r => String(r.id));
+  const playerNames = exportedData.map(r => r.name || '');
+  return {
+    id:           crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    timestamp:    new Date().toISOString(),
+    tab:          currentTab,
+    title,
+    subtitle,
+    filters:      filterSnapshot,
+    playerIds,
+    playerNames,
+    playerCount:  exportedData.length,
+    exportType,
+    selectedOnly,
+  };
+}
+
+function saveExportHistory(title, subtitle, exportType, selectedOnly) {
+  let exportedData = window._filteredData || [];
+  if (selectedOnly && selectedPlayerIds.size > 0) {
+    exportedData = exportedData.filter(r => selectedPlayerIds.has(r.id));
+  }
+  if (!exportedData.length) return;
+  const record = buildHistoryRecord(title, subtitle, exportType, selectedOnly, exportedData);
+  exportHistory.unshift(record);
+  if (exportHistory.length > HISTORY_MAX) exportHistory = exportHistory.slice(0, HISTORY_MAX);
+  saveExportHistoryToStorage();
+  saveHistoryToSupabase(record);
+  showToast(`Export saved to history (${record.playerCount} players)`, 'success');
+}
+
+function updateHistoryBadge() {
+  const badge = document.getElementById('historyBadge');
+  if (exportHistory.length > 0) {
+    badge.textContent = exportHistory.length;
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openHistoryPanel() {
+  syncHistoryFromSupabase().then(() => renderHistoryPanel());
+  renderHistoryPanel();
+  document.getElementById('historyPanelOverlay').classList.add('open');
+  document.getElementById('historyPanel').classList.add('open');
+}
+
+function closeHistoryPanel() {
+  document.getElementById('historyPanelOverlay').classList.remove('open');
+  document.getElementById('historyPanel').classList.remove('open');
+}
+
+function renderHistoryPanel() {
+  const body  = document.getElementById('historyPanelBody');
+  const count = document.getElementById('historyCount');
+  count.textContent = `${exportHistory.length} export${exportHistory.length !== 1 ? 's' : ''} saved`;
+  if (exportHistory.length === 0) {
+    body.innerHTML = `<div class="history-empty"><div class="icon">📂</div><p>No exports yet.<br>Your export history will appear here after you export a PDF or Excel file.</p></div>`;
+    return;
+  }
+  body.innerHTML = exportHistory.map((rec, idx) => {
+    const date = new Date(rec.timestamp);
+    const dateStr = date.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    const timeStr = date.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+    const tabLabels = { batting:'Batting', bowling:'Bowling', allround:'All-Round', fielding:'Fielding' };
+    const tabIcons  = { batting:'🏏', bowling:'⚡', allround:'⭐', fielding:'🧤' };
+    const visibleNames = rec.playerNames.slice(0, 8);
+    const extraCount   = rec.playerNames.length - visibleNames.length;
+    const filterParts = [];
+    if (rec.filters) {
+      ['tournament','category','ballType','format','venue'].forEach(k => {
+        if (rec.filters[k] && rec.filters[k].length > 0) filterParts.push(rec.filters[k].join(', '));
+      });
+      if (rec.filters.dateFrom || rec.filters.dateTo) {
+        filterParts.push(`${rec.filters.dateFrom || '…'} → ${rec.filters.dateTo || '…'}`);
+      }
+    }
+    const filterSummary = filterParts.length ? filterParts.join(' · ') : 'All data';
+    const fromCloud = rec.fromSupabase ? '☁️ ' : '';
+    return `
+      <div class="history-item">
+        <div class="history-item-top">
+          <div class="history-item-title">${fromCloud}${rec.title || 'Untitled Export'}</div>
+          <span class="history-item-type ${rec.exportType}">${rec.exportType.toUpperCase()}</span>
+        </div>
+        <div class="history-item-meta">
+          <span class="history-meta-chip">${tabIcons[rec.tab] || ''} ${tabLabels[rec.tab] || rec.tab}</span>
+          <span class="history-meta-chip">👤 ${rec.playerCount} player${rec.playerCount !== 1 ? 's' : ''}</span>
+          <span class="history-meta-chip">📅 ${dateStr} ${timeStr}</span>
+          ${rec.selectedOnly ? '<span class="history-meta-chip">⭐ Selected only</span>' : ''}
+        </div>
+        ${rec.subtitle ? `<div class="history-item-subtitle">${rec.subtitle}</div>` : ''}
+        <div class="history-item-subtitle" style="color:var(--muted);font-size:0.7rem;">${filterSummary}</div>
+        <div class="history-item-players">
+          ${visibleNames.map(n => `<span class="history-player-tag">${n}</span>`).join('')}
+          ${extraCount > 0 ? `<span class="history-player-tag more">+${extraCount} more</span>` : ''}
+        </div>
+        <div class="history-item-actions">
+          <button class="btn btn-primary btn-sm" style="flex:1" onclick="reSelectFromHistory(${idx})">↩ Re-select Players</button>
+          <button class="btn btn-ghost btn-sm" onclick="reExportHistoryItem(${idx}, 'pdf')" title="Re-export as PDF">📄</button>
+          <button class="btn btn-ghost btn-sm" onclick="reExportHistoryItem(${idx}, 'excel')" title="Re-export as Excel">⬇</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteHistoryItem(${idx})" title="Remove from history">🗑</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function reSelectFromHistory(idx) {
+  const rec = exportHistory[idx];
+  if (!rec) return;
+  closeHistoryPanel();
+  if (rec.tab !== currentTab) {
+    switchTab(rec.tab);
+    const trySelect = () => {
+      if (window._processedData) applyHistorySelection(rec);
+      else setTimeout(trySelect, 300);
+    };
+    setTimeout(trySelect, 500);
+  } else {
+    applyHistorySelection(rec);
+  }
+  showToast(`Re-selected ${rec.playerIds.length} players from "${rec.title}"`, 'info');
+}
+
+function applyHistorySelection(rec) {
+  selectedPlayerIds.clear();
+  rec.playerIds.forEach(id => selectedPlayerIds.add(id));
+  updateSelectionBar();
+  renderTable();
+  document.querySelector('.table-wrapper')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function reExportHistoryItem(idx, type) {
+  const rec = exportHistory[idx];
+  if (!rec) return;
+  if (rec.tab !== currentTab) {
+    showToast(`Switch to the ${rec.tab} tab first, then re-export.`, 'info');
+    return;
+  }
+  const prevSelection = new Set(selectedPlayerIds);
+  rec.playerIds.forEach(id => selectedPlayerIds.add(id));
+  if (type === 'pdf') generatePDF(rec.title, rec.subtitle, true);
+  else generateExcel(rec.title, rec.subtitle, rec.tab, true);
+  selectedPlayerIds.clear();
+  prevSelection.forEach(id => selectedPlayerIds.add(id));
+}
+
+function deleteHistoryItem(idx) {
+  exportHistory.splice(idx, 1);
+  saveExportHistoryToStorage();
+  renderHistoryPanel();
+}
+
+function clearAllHistory() {
+  if (!confirm('Clear all export history? This cannot be undone.')) return;
+  exportHistory = [];
+  saveExportHistoryToStorage();
+  renderHistoryPanel();
+  showToast('Export history cleared.', 'info');
+}
+
+// ════════════════════════════════════════════════════════════
+// FEATURE 2: PDF IMPORT — extract player names using PDF.js
+// (no Anthropic API key required)
+// ════════════════════════════════════════════════════════════
+
+function openImportPDFModal() {
+  document.getElementById('importStatus').classList.remove('visible');
+  document.getElementById('importResults').style.display = 'none';
+  document.getElementById('confirmImportBtn').style.display = 'none';
+  document.getElementById('pdfFileInput').value = '';
+  _importMatchedIds = [];
+  document.getElementById('importPDFModal').classList.add('open');
+}
+
+function closeImportPDFModal() {
+  document.getElementById('importPDFModal').classList.remove('open');
+}
+
+function handlePDFFileSelect(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.type !== 'application/pdf') { showToast('Please select a PDF file.', 'error'); return; }
+  processPDFFile(file);
+}
+
+async function processPDFFile(file) {
+  const statusEl   = document.getElementById('importStatus');
+  const statusText = document.getElementById('importStatusText');
+  const resultsEl  = document.getElementById('importResults');
+  const confirmBtn = document.getElementById('confirmImportBtn');
+
+  statusEl.classList.add('visible');
+  statusText.textContent = `Reading "${file.name}"…`;
+  resultsEl.style.display = 'none';
+  confirmBtn.style.display = 'none';
+  _importMatchedIds = [];
+
+  try {
+    statusText.textContent = 'Converting PDF to base64…';
+    const base64Data = await fileToBase64(file);
+
+    statusText.textContent = 'Extracting text from PDF…';
+    const extractedNames = await extractNamesFromPDF(base64Data);
+
+    statusText.textContent = `Found ${extractedNames.length} name${extractedNames.length !== 1 ? 's' : ''}. Matching against dataset…`;
+
+    const allPlayers = getAllPlayersInDataset();
+    const { matched, unmatched } = matchNamesToPlayers(extractedNames, allPlayers);
+
+    _importMatchedIds = matched.map(m => m.player.id);
+
+    statusEl.classList.remove('visible');
+    renderImportResults(matched, unmatched, extractedNames.length);
+    resultsEl.style.display = '';
+    if (matched.length > 0) confirmBtn.style.display = '';
+
+  } catch(e) {
+    statusEl.classList.remove('visible');
+    resultsEl.style.display = '';
+    resultsEl.innerHTML = `<div class="panel-error">Error: ${e.message}</div>`;
+  }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── Extract player names from PDF using PDF.js (no API key needed) ───
+async function extractNamesFromPDF(base64Data) {
+  if (typeof pdfjsLib === 'undefined') {
+    throw new Error('PDF.js library not loaded. Check your internet connection.');
+  }
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+  // Convert base64 → Uint8Array
+  const binary = atob(base64Data);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  // Load and read all pages
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  let fullText = '';
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page    = await pdf.getPage(pageNum);
+    const content = await page.getTextContent();
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
+  }
+
+  // Strategy 1: scan full text for known player names from the loaded dataset
+  const allPlayers = getAllPlayersInDataset();
+  const foundNames = new Set();
+  allPlayers.forEach(p => {
+    if (!p.name || p.name.length < 3) return;
+    if (fullText.toLowerCase().includes(p.name.toLowerCase())) {
+      foundNames.add(p.name.trim());
+    }
+  });
+  if (foundNames.size > 0) return [...foundNames];
+
+  // Strategy 2: heuristic — tokens that look like "Firstname Lastname" capitalised pairs
+  const namePattern = /^[A-Z][a-z]+(\s[A-Z][a-z]+)+$/;
+  const SKIP_WORDS  = new Set([
+    'Batting','Bowling','Fielding','Leaders','Stats','Cricket','Player',
+    'Analytics','Dashboard','Generated','Landscape','Total','Overs','Best',
+    'Strike','Rate','Average','Economy','Innings','Wickets','Maidens',
+    'All','Round','Selected','Only','Not','Outs','Run','Report'
+  ]);
+  const candidates = new Set();
+  fullText.split(/[\n|]+/).forEach(line => {
+    line.trim().split(/\s{2,}/).forEach(tok => {
+      const t = tok.trim();
+      if (t.length < 5 || t.length > 45) return;
+      if (!namePattern.test(t)) return;
+      if (t.split(' ').some(w => SKIP_WORDS.has(w))) return;
+      candidates.add(t);
+    });
+  });
+  return [...candidates];
+}
+
+// ── Get all players currently in the dataset ──────────────
+function getAllPlayersInDataset() {
+  const players = new Map();
+  if (rawDataCache.batting) {
+    rawDataCache.batting.forEach(r => {
+      if (r.batter_id && !players.has(String(r.batter_id)))
+        players.set(String(r.batter_id), { id: String(r.batter_id), name: r.batter_name || '' });
+    });
+  }
+  if (rawDataCache.bowling) {
+    rawDataCache.bowling.forEach(r => {
+      if (r.bowler_id && !players.has(String(r.bowler_id)))
+        players.set(String(r.bowler_id), { id: String(r.bowler_id), name: r.bowler_name || '' });
+    });
+  }
+  Object.entries(playerInfoMap).forEach(([id, info]) => {
+    if (!players.has(id))
+      players.set(id, { id, name: getPlayerFullName(id) || '' });
+  });
+  if (window._processedData) {
+    window._processedData.forEach(r => {
+      if (r.id && !players.has(String(r.id)))
+        players.set(String(r.id), { id: String(r.id), name: r.name || '' });
+    });
+  }
+  return [...players.values()];
+}
+
+// ── Fuzzy name matching ───────────────────────────────────
+function matchNamesToPlayers(extractedNames, allPlayers) {
+  const matched   = [];
+  const unmatched = [];
+  const playerByNorm = new Map();
+  allPlayers.forEach(p => {
+    const norm = normaliseName(p.name);
+    if (norm) playerByNorm.set(norm, p);
+  });
+  extractedNames.forEach(pdfName => {
+    const normPdf = normaliseName(pdfName);
+    if (!normPdf) return;
+    if (playerByNorm.has(normPdf)) {
+      matched.push({ pdfName, player: playerByNorm.get(normPdf), matchType: 'exact' });
+      return;
+    }
+    let bestMatch = null, bestScore = 0;
+    allPlayers.forEach(p => {
+      const score = nameMatchScore(normPdf, normaliseName(p.name));
+      if (score > bestScore) { bestScore = score; bestMatch = p; }
+    });
+    if (bestScore >= 0.7) matched.push({ pdfName, player: bestMatch, matchType: 'fuzzy' });
+    else unmatched.push(pdfName);
+  });
+  return { matched, unmatched };
+}
+
+function normaliseName(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function nameMatchScore(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const wordsA = a.split(' '), wordsB = b.split(' ');
+  const matchedAinB = wordsA.filter(w => w.length > 1 && wordsB.includes(w)).length;
+  const matchedBinA = wordsB.filter(w => w.length > 1 && wordsA.includes(w)).length;
+  return Math.max(matchedAinB / wordsA.length, matchedBinA / wordsB.length);
+}
+
+// ── Render import results ──────────────────────────────────
+function renderImportResults(matched, unmatched, totalExtracted) {
+  const summaryBar       = document.getElementById('importSummaryBar');
+  const matchedSection   = document.getElementById('matchedSection');
+  const unmatchedSection = document.getElementById('unmatchedSection');
+  const matchedList      = document.getElementById('matchedPlayerList');
+  const unmatchedList    = document.getElementById('unmatchedPlayerList');
+
+  summaryBar.innerHTML = `
+    <div class="import-summary-stat">
+      <div class="isv">${totalExtracted}</div>
+      <div class="isl">Names found in PDF</div>
+    </div>
+    <div class="import-summary-stat">
+      <div class="isv" style="color:var(--green)">${matched.length}</div>
+      <div class="isl">Matched to players</div>
+    </div>
+    <div class="import-summary-stat unmatched-stat">
+      <div class="isv">${unmatched.length}</div>
+      <div class="isl">Not found</div>
+    </div>
+  `;
+
+  if (matched.length > 0) {
+    matchedSection.style.display = '';
+    matchedList.innerHTML = matched.map(m => `
+      <div class="import-player-row matched">
+        <span class="match-icon">${m.matchType === 'exact' ? '✅' : '🔍'}</span>
+        <span class="pdf-name">${m.pdfName}</span>
+        ${m.matchType === 'fuzzy' && m.player.name !== m.pdfName ? `<span class="arrow">→</span><span class="matched-name">${m.player.name}</span>` : ''}
+        <span style="margin-left:auto;font-size:0.7rem;color:var(--muted)">${m.matchType}</span>
+      </div>
+    `).join('');
+  } else {
+    matchedSection.style.display = 'none';
+  }
+
+  if (unmatched.length > 0) {
+    unmatchedSection.style.display = '';
+    unmatchedList.innerHTML = unmatched.map(name => `
+      <div class="import-player-row unmatched">
+        <span class="match-icon">❓</span>
+        <span class="pdf-name">${name}</span>
+      </div>
+    `).join('');
+  } else {
+    unmatchedSection.style.display = 'none';
+  }
+}
+
+// ── Confirm import ────────────────────────────────────────
+function confirmPDFImport() {
+  if (!_importMatchedIds.length) return;
+  const currentIds = new Set((window._processedData || []).map(r => String(r.id)));
+  const validIds   = _importMatchedIds.filter(id => currentIds.has(id));
+  const missingCount = _importMatchedIds.length - validIds.length;
+  validIds.forEach(id => selectedPlayerIds.add(id));
+  closeImportPDFModal();
+  updateSelectionBar();
+  renderTable();
+  if (missingCount > 0) {
+    showToast(`Selected ${validIds.length} players. ${missingCount} not visible in current tab/filters.`, 'info', 5000);
+  } else {
+    showToast(`Selected ${validIds.length} players from PDF.`, 'success');
+  }
+  document.querySelector('.table-wrapper')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ════════════════════════════════════════════════════════════
+// EXPORT PDF
+// ════════════════════════════════════════════════════════════
+let _pdfSelectedOnly = false;
+
+function exportPDF(selectedOnly = false) {
+  const data = window._filteredData;
+  if (!data || !data.length) return;
+  _pdfSelectedOnly = selectedOnly;
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  const selSuffix = selectedOnly && selectedPlayerIds.size > 0 ? ' – Selected Players' : '';
+  document.getElementById('pdfTitleInput').value = `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}${selSuffix}`;
+  document.getElementById('pdfSubtitleInput').value = '';
+  document.getElementById('pdfTitleModal').classList.add('open');
+  setTimeout(() => { const inp = document.getElementById('pdfTitleInput'); inp.focus(); inp.select(); }, 80);
+}
+
+function closePDFTitleModal() { document.getElementById('pdfTitleModal').classList.remove('open'); }
+
+function confirmPDFExport() {
+  const customTitle    = document.getElementById('pdfTitleInput').value.trim();
+  const customSubtitle = document.getElementById('pdfSubtitleInput').value.trim();
+  closePDFTitleModal();
+  saveExportHistory(customTitle, customSubtitle, 'pdf', _pdfSelectedOnly);
+  generatePDF(customTitle, customSubtitle, _pdfSelectedOnly);
+}
+
+function generatePDF(customTitle, customSubtitle, selectedOnly = false) {
+  let data = window._filteredData;
+  if (!data || !data.length) return;
+  if (selectedOnly && selectedPlayerIds.size > 0) data = data.filter(r => selectedPlayerIds.has(r.id));
+
+  const defaultTabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  let headers = [], rows = [];
+
+  if (currentTab === 'batting') {
+    headers = ['#','Player','Inn','Runs','HS','Avg','SR','4s','6s','50s','100s'];
+    rows = data.map((r, i) => [i+1, r.name, r.innings, r.runs, r.highScoreNotOut ? `${r.highScore}*` : r.highScore, r.avg ?? '-', r.sr ?? '-', r.fours, r.sixes, r.fifties, r.hundreds]);
+  } else if (currentTab === 'bowling') {
+    headers = ['#','Player','Inn','Overs','Wkts','Runs','Avg','Econ','SR','Mdn','Best','5W'];
+    rows = data.map((r, i) => [i+1, r.name, r.matches, r.overs.toFixed(1), r.wickets, r.runs, r.avg ?? '-', r.eco ?? '-', r.sr ?? '-', r.maidens, r.best, r.fiveWickets]);
+  } else if (currentTab === 'fielding') {
+    headers = ['#','Player','Total','Ct (Field)','Ct (WK)','St','RO'];
+    rows = data.map((r, i) => [i+1, r.name, r.totalDismissals, r.catches, r.catchesWk, r.stumpings, r.runOuts]);
+  } else if (currentTab === 'allround') {
+    headers = ['#','Player','Bat Inn','Runs','Avg','SR','50s','100s','Bowl Inn','Wkts','Avg','Econ','Best','Ct','St','RO'];
+    rows = data.map((r, i) => [i+1, r.name, r.batInnings, r.batRuns, r.batAvg ?? '-', r.batSR ?? '-', r.bat50s, r.bat100s, r.bowlInnings, r.bowlWkts, r.bowlAvg ?? '-', r.bowlEco ?? '-', r.bowlBest, r.catches, r.stumpings, r.runOuts]);
+  }
+
+  const now = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+  const title = customTitle || defaultTabLabels[currentTab] || 'Stats';
+  const filterParts = [];
+  Object.entries(multiSelectState).forEach(([key, val]) => { if (val.size > 0) filterParts.push([...val].join(', ')); });
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  if (dateFrom || dateTo) filterParts.push(`${dateFrom || '…'} → ${dateTo || '…'}`);
+  const filterLine = filterParts.length ? filterParts.join(' · ') : 'All data';
+  const subtitleLine = customSubtitle ? `${customSubtitle} · ${filterLine}` : filterLine;
+  const tableRows = rows.map(row => `<tr>${row.map((cell, ci) => `<td class="${ci === 1 ? 'player-col' : ''}">${cell ?? ''}</td>`).join('')}</tr>`).join('');
+
+  const printHTML = `<!DOCTYPE html>
+<html>
+<head>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<meta charset="UTF-8">
+<title>${title}</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4 landscape; margin: 14mm 12mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', sans-serif; background: #fff; color: #111; font-size: 9pt; }
+  .pdf-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 2.5px solid #111; }
+  .pdf-logo { display: flex; align-items: center; gap: 8px; }
+  .pdf-logo-icon { width: 32px; height: 32px; background: #e8ff47; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .pdf-logo-text h1 { font-family: 'Bebas Neue', sans-serif; font-size: 18pt; letter-spacing: 2px; line-height: 1; }
+  .pdf-logo-text p { font-size: 7pt; color: #666; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+  .pdf-header-right { text-align: right; }
+  .pdf-header-right .report-title { font-family: 'Bebas Neue', sans-serif; font-size: 15pt; letter-spacing: 1.5px; color: #111; }
+  .pdf-header-right .report-meta { font-size: 7pt; color: #666; margin-top: 3px; }
+  .pdf-header-right .report-filters { font-size: 7pt; color: #444; margin-top: 2px; max-width: 320px; text-align: right; }
+  table { width: 100%; border-collapse: collapse; margin-top: 2px; }
+  thead th { background: #111; color: #e8ff47; font-family: 'DM Sans', sans-serif; font-size: 7pt; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; padding: 5px 6px; text-align: left; white-space: nowrap; }
+  thead th:first-child { width: 24px; text-align: center; }
+  tbody tr:nth-child(even) { background: #f7f7f7; }
+  tbody tr:nth-child(odd)  { background: #fff; }
+  tbody td { font-family: 'DM Mono', monospace; font-size: 8pt; padding: 4px 6px; border-bottom: 1px solid #e8e8e8; white-space: nowrap; }
+  tbody td:first-child { font-family: 'DM Sans', sans-serif; font-size: 7.5pt; color: #888; text-align: center; }
+  tbody td.player-col { font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 8.5pt; color: #111; }
+  .pdf-footer { margin-top: 10px; display: flex; justify-content: space-between; font-size: 7pt; color: #aaa; border-top: 1px solid #ddd; padding-top: 5px; }
+</style>
+</head>
+<body>
+<div class="pdf-header">
+  <div class="pdf-logo">
+    <div class="pdf-logo-icon">🏏</div>
+    <div class="pdf-logo-text"><h1>TCA Cricket Stats</h1><p>Player Analytics Dashboard</p></div>
+  </div>
+  <div class="pdf-header-right">
+    <div class="report-title">${title}</div>
+    <div class="report-meta">Generated ${now} · ${rows.length} player${rows.length !== 1 ? 's' : ''}${selectedOnly && selectedPlayerIds.size > 0 ? ' (selected)' : ''}</div>
+    <div class="report-filters">${subtitleLine}</div>
+  </div>
+</div>
+<table>
+  <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+  <tbody>${tableRows}</tbody>
+</table>
+<div class="pdf-footer">
+  <span>TCA Cricket Stats · tca_${currentTab}_${new Date().toISOString().split('T')[0]}</span>
+  <span>Landscape · A4</span>
+</div>
+<script>window.onload = function() { setTimeout(function() { window.print(); }, 800); };<\/script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('Please allow pop-ups for this page to export PDF.'); return; }
+  win.document.write(printHTML);
+  win.document.close();
+}
+
+// ════════════════════════════════════════════════════════════
+// EXPORT EXCEL
+// ════════════════════════════════════════════════════════════
+let _xlsSelectedOnly = false;
+
+function getXlsColDefs() {
+  if (currentTab === 'batting') return [
+    { key: 'name',       label: 'Player',      width: 28, numFmt: '@',    align: 'left'   },
+    { key: 'innings',    label: 'Inn',         width: 8,  numFmt: '0',    align: 'center' },
+    { key: 'runs',       label: 'Runs',        width: 10, numFmt: '0',    align: 'center' },
+    { key: '_hs',        label: 'HS',          width: 8,  numFmt: '@',    align: 'center' },
+    { key: 'avg',        label: 'Average',     width: 10, numFmt: '0.00', align: 'center' },
+    { key: 'sr',         label: 'Strike Rate', width: 12, numFmt: '0.00', align: 'center' },
+    { key: 'fours',      label: '4s',          width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'sixes',      label: '6s',          width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'fifties',    label: '50s',         width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'hundreds',   label: '100s',        width: 8,  numFmt: '0',    align: 'center' },
+    { key: 'notOuts',    label: 'Not Outs',    width: 10, numFmt: '0',    align: 'center' },
+  ];
+  if (currentTab === 'bowling') return [
+    { key: 'name',        label: 'Player',      width: 28, numFmt: '@',    align: 'left'   },
+    { key: 'matches',     label: 'Inn',         width: 8,  numFmt: '0',    align: 'center' },
+    { key: '_overs',      label: 'Overs',       width: 10, numFmt: '@',    align: 'center' },
+    { key: 'wickets',     label: 'Wickets',     width: 10, numFmt: '0',    align: 'center' },
+    { key: 'runs',        label: 'Runs',        width: 10, numFmt: '0',    align: 'center' },
+    { key: 'avg',         label: 'Average',     width: 10, numFmt: '0.00', align: 'center' },
+    { key: 'eco',         label: 'Economy',     width: 10, numFmt: '0.00', align: 'center' },
+    { key: 'sr',          label: 'Strike Rate', width: 12, numFmt: '0.00', align: 'center' },
+    { key: 'maidens',     label: 'Maidens',     width: 10, numFmt: '0',    align: 'center' },
+    { key: 'best',        label: 'Best',        width: 8,  numFmt: '@',    align: 'center' },
+    { key: 'fiveWickets', label: '5W',          width: 7,  numFmt: '0',    align: 'center' },
+  ];
+  if (currentTab === 'fielding') return [
+    { key: 'name',            label: 'Player',     width: 28, numFmt: '@', align: 'left'   },
+    { key: 'totalDismissals', label: 'Total',      width: 10, numFmt: '0', align: 'center' },
+    { key: 'catches',         label: 'Ct (Field)', width: 12, numFmt: '0', align: 'center' },
+    { key: 'catchesWk',       label: 'Ct (WK)',    width: 10, numFmt: '0', align: 'center' },
+    { key: 'stumpings',       label: 'Stumpings',  width: 12, numFmt: '0', align: 'center' },
+    { key: 'runOuts',         label: 'Run Outs',   width: 10, numFmt: '0', align: 'center' },
+  ];
+  if (currentTab === 'allround') return [
+    { key: 'name',        label: 'Player',      width: 28, numFmt: '@',    align: 'left'   },
+    { key: 'batInnings',  label: 'Bat Inn',     width: 9,  numFmt: '0',    align: 'center' },
+    { key: 'batRuns',     label: 'Runs',        width: 9,  numFmt: '0',    align: 'center' },
+    { key: 'batAvg',      label: 'Bat Avg',     width: 9,  numFmt: '0.00', align: 'center' },
+    { key: 'batSR',       label: 'Bat SR',      width: 9,  numFmt: '0.00', align: 'center' },
+    { key: 'bat50s',      label: '50s',         width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'bat100s',     label: '100s',        width: 8,  numFmt: '0',    align: 'center' },
+    { key: 'bowlInnings', label: 'Bowl Inn',    width: 9,  numFmt: '0',    align: 'center' },
+    { key: 'bowlWkts',    label: 'Wickets',     width: 9,  numFmt: '0',    align: 'center' },
+    { key: 'bowlAvg',     label: 'Bowl Avg',    width: 9,  numFmt: '0.00', align: 'center' },
+    { key: 'bowlEco',     label: 'Economy',     width: 9,  numFmt: '0.00', align: 'center' },
+    { key: 'bowlBest',    label: 'Best',        width: 8,  numFmt: '@',    align: 'center' },
+    { key: 'bowl5W',      label: '5W',          width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'catches',     label: 'Catches',     width: 9,  numFmt: '0',    align: 'center' },
+    { key: 'stumpings',   label: 'St',          width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'runOuts',     label: 'RO',          width: 7,  numFmt: '0',    align: 'center' },
+    { key: 'fieldDis',    label: 'Field Total', width: 11, numFmt: '0',    align: 'center' },
+  ];
+  return [];
+}
+
+function getRowValue(r, key) {
+  if (key === '_hs')    return r.highScoreNotOut ? `${r.highScore}*` : String(r.highScore ?? '');
+  if (key === '_overs') return r.overs != null ? r.overs.toFixed(1) : '';
+  const v = r[key];
+  if (v === null || v === undefined) return '';
+  return v;
+}
+
+function exportExcel(selectedOnly = false) {
+  const data = window._filteredData;
+  if (!data || !data.length) return;
+  _xlsSelectedOnly = selectedOnly;
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  const selSuffix = selectedOnly && selectedPlayerIds.size > 0 ? ' – Selected Players' : '';
+  const defaultTitle = `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}${selSuffix}`;
+  document.getElementById('xlsTitleInput').value    = defaultTitle;
+  document.getElementById('xlsSubtitleInput').value = '';
+  document.getElementById('xlsSheetInput').value    = tabLabels[currentTab] || 'Stats';
+  document.getElementById('xlsTitleModal').classList.add('open');
+  setTimeout(() => { const inp = document.getElementById('xlsTitleInput'); inp.focus(); inp.select(); }, 80);
+}
+
+function closeExcelTitleModal() { document.getElementById('xlsTitleModal').classList.remove('open'); }
+
+function confirmExcelExport() {
+  const title    = document.getElementById('xlsTitleInput').value.trim();
+  const subtitle = document.getElementById('xlsSubtitleInput').value.trim();
+  const sheet    = document.getElementById('xlsSheetInput').value.trim();
+  closeExcelTitleModal();
+  saveExportHistory(title, subtitle, 'xlsx', _xlsSelectedOnly);
+  generateExcel(title, subtitle, sheet, _xlsSelectedOnly);
+}
+
+function generateExcel(customTitle, customSubtitle, customSheet, selectedOnly = false) {
+  if (typeof XLSX === 'undefined') { alert('SheetJS library not loaded.'); return; }
+  let data = window._filteredData || [];
+  if (!data.length) return;
+  if (selectedOnly && selectedPlayerIds.size > 0) data = data.filter(r => selectedPlayerIds.has(r.id));
+
+  const tabLabels = { batting:'Batting Leaders', bowling:'Bowling Leaders', fielding:'Fielding Leaders', allround:'All-Round Stats' };
+  const title     = customTitle    || `TCA Cricket Stats – ${tabLabels[currentTab] || 'Stats'}`;
+  const sheetName = (customSheet   || tabLabels[currentTab] || 'Stats').slice(0, 31);
+
+  const filterParts = [];
+  Object.entries(multiSelectState).forEach(([key, val]) => { if (val.size > 0) filterParts.push([...val].join(', ')); });
+  const dateFrom = document.getElementById('filterDateFrom').value;
+  const dateTo   = document.getElementById('filterDateTo').value;
+  if (dateFrom || dateTo) filterParts.push(`${dateFrom || '…'} → ${dateTo || '…'}`);
+  const filterLine   = filterParts.length ? filterParts.join(' · ') : 'All data';
+  const subtitleLine = customSubtitle ? `${customSubtitle}  ·  ${filterLine}` : filterLine;
+  const now          = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+
+  const cols    = getXlsColDefs();
+  const numCols = cols.length;
+  const aoa = [];
+  aoa.push([title]);
+  aoa.push([subtitleLine]);
+  aoa.push([`Generated: ${now}  ·  ${data.length} player${data.length !== 1 ? 's' : ''}${selectedOnly && selectedPlayerIds.size > 0 ? ' (selected)' : ''}`]);
+  aoa.push([]);
+  aoa.push(cols.map(c => c.label));
+
+  const dataStartRow = 6;
+  data.forEach(r => { aoa.push(cols.map(c => getRowValue(r, c.key))); });
+
+  const totalsRow = cols.map(c => {
+    if (c.key === 'name' || c.numFmt === '@') return c.key === 'name' ? 'TOTALS' : '';
+    if (['avg','batAvg','bowlAvg','sr','batSR','eco','bowlEco'].includes(c.key)) return '';
+    const colLetter = XLSX.utils.encode_col(cols.indexOf(c));
+    const dataEndRow = dataStartRow + data.length - 1;
+    return { f: `SUM(${colLetter}${dataStartRow}:${colLetter}${dataEndRow})` };
+  });
+  aoa.push(totalsRow);
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']   = cols.map(c => ({ wch: c.width }));
+  ws['!merges'] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: numCols - 1 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: numCols - 1 } },
+    { s: { r: 2, c: 0 }, e: { r: 2, c: numCols - 1 } },
+  ];
+
+  function cellRef(r, c) { return XLSX.utils.encode_cell({ r, c }); }
+  function applyRangeStyle(rStart, rEnd, cStart, cEnd, style) {
+    for (let r = rStart; r <= rEnd; r++) {
+      for (let c = cStart; c <= cEnd; c++) {
+        const ref = cellRef(r, c);
+        if (ws[ref]) ws[ref].s = { ...(ws[ref].s || {}), ...style };
+        else ws[ref] = { t: 'z', v: '', s: style };
+      }
+    }
+  }
+
+  const C_DARK='0A0C0F',C_ACCENT='E8FF47',C_WHITE='FFFFFF',C_ALT='F4F6F9',C_TITLE_BG='111318',C_TOTALS_BG='E8FF47',C_BORDER='DDDDDD';
+  const borderThin = { top:{style:'thin',color:{rgb:C_BORDER}},bottom:{style:'thin',color:{rgb:C_BORDER}},left:{style:'thin',color:{rgb:C_BORDER}},right:{style:'thin',color:{rgb:C_BORDER}} };
+
+  const titleCell = ws[cellRef(0,0)];
+  if (titleCell) titleCell.s = { font:{bold:true,sz:18,color:{rgb:C_ACCENT},name:'Arial'}, fill:{fgColor:{rgb:C_TITLE_BG}}, alignment:{horizontal:'left',vertical:'center'} };
+  applyRangeStyle(0,0,1,numCols-1,{fill:{fgColor:{rgb:C_TITLE_BG}}});
+  const subCell = ws[cellRef(1,0)];
+  if (subCell) subCell.s = { font:{sz:9,color:{rgb:'9CA3AF'},name:'Arial'}, fill:{fgColor:{rgb:C_TITLE_BG}}, alignment:{horizontal:'left',vertical:'center'} };
+  applyRangeStyle(1,1,1,numCols-1,{fill:{fgColor:{rgb:C_TITLE_BG}}});
+  const metaCell = ws[cellRef(2,0)];
+  if (metaCell) metaCell.s = { font:{sz:8,italic:true,color:{rgb:'6B7280'},name:'Arial'}, fill:{fgColor:{rgb:C_TITLE_BG}}, alignment:{horizontal:'left',vertical:'center'} };
+  applyRangeStyle(2,2,1,numCols-1,{fill:{fgColor:{rgb:C_TITLE_BG}}});
+
+  for (let c = 0; c < numCols; c++) {
+    const ref = cellRef(4,c);
+    if (ws[ref]) ws[ref].s = { font:{bold:true,sz:9,color:{rgb:C_ACCENT},name:'Arial'}, fill:{fgColor:{rgb:C_DARK}}, alignment:{horizontal:cols[c].align||'center',vertical:'center'}, border:borderThin };
+  }
+  for (let ri = 0; ri < data.length; ri++) {
+    const rowIdx = 5+ri, bgColor = ri%2===1?C_ALT:C_WHITE;
+    for (let c = 0; c < numCols; c++) {
+      const ref = cellRef(rowIdx,c);
+      if (!ws[ref]) continue;
+      ws[ref].s = { font:{sz:9,bold:c===0,color:{rgb:'111318'},name:'Arial'}, fill:{fgColor:{rgb:bgColor}}, alignment:{horizontal:cols[c].align||'center',vertical:'center'}, border:borderThin };
+      if (cols[c].numFmt && cols[c].numFmt !== '@') ws[ref].z = cols[c].numFmt;
+    }
+  }
+  const totalsRowIdx = 5+data.length;
+  for (let c = 0; c < numCols; c++) {
+    const ref = cellRef(totalsRowIdx,c);
+    if (!ws[ref]) ws[ref] = {t:'z',v:''};
+    ws[ref].s = { font:{bold:true,sz:9,color:{rgb:'000000'},name:'Arial'}, fill:{fgColor:{rgb:C_TOTALS_BG}}, alignment:{horizontal:cols[c].align||'center',vertical:'center'}, border:{top:{style:'medium',color:{rgb:'000000'}},bottom:{style:'medium',color:{rgb:'000000'}},left:{style:'thin',color:{rgb:C_BORDER}},right:{style:'thin',color:{rgb:C_BORDER}}} };
+  }
+
+  ws['!rows']   = [{hpt:32},{hpt:16},{hpt:14},{hpt:6},{hpt:18},...Array(data.length).fill({hpt:15}),{hpt:18}];
+  ws['!freeze'] = {xSplit:1,ySplit:5};
+  XLSX.utils.book_append_sheet(wb, ws, sheetName);
+
+  const suffix   = selectedOnly && selectedPlayerIds.size > 0 ? '_selected' : '';
+  const filename = `tca_${currentTab}${suffix}_${new Date().toISOString().split('T')[0]}.xlsx`;
+  XLSX.writeFile(wb, filename, { cellStyles: true });
+}
+
+// ════════════════════════════════════════════════════════════
+// PLAYER DETAIL PANEL
+// ════════════════════════════════════════════════════════════
+
+const playerDetailCache = {};
+
+function getPlayerFullName(playerId) {
+  const info = playerInfoMap[String(playerId)];
+  if (!info) return null;
+  return info.full_name || info.player_name || info.name ||
+         [info.first_name, info.last_name].filter(Boolean).join(' ') || null;
+}
+
+function getPlayerInitials(name) {
+  if (!name) return '?';
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function openPlayerPanel(playerId, fallbackName) {
+  const overlay = document.getElementById('playerPanelOverlay');
+  const panel   = document.getElementById('playerPanel');
+  const displayName = getPlayerFullName(playerId) || fallbackName || 'Unknown';
+  document.getElementById('playerPanelName').textContent    = displayName;
+  document.getElementById('playerPanelAvatar').textContent  = getPlayerInitials(displayName);
+  document.getElementById('playerPanelTags').innerHTML      = '';
+  document.getElementById('playerPanelBody').innerHTML      = `<div class="panel-loading"><div class="spinner"></div><span>Loading player…</span></div>`;
+  overlay.classList.add('open');
+  panel.classList.add('open');
+  loadPlayerDetail(playerId, fallbackName);
+}
+
+function closePlayerPanel() {
+  document.getElementById('playerPanelOverlay').classList.remove('open');
+  document.getElementById('playerPanel').classList.remove('open');
+}
+
+async function loadPlayerDetail(playerId, fallbackName) {
+  const body = document.getElementById('playerPanelBody');
+  try {
+    let info = playerInfoMap[String(playerId)];
+    if (!info) {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/tca_db_player_info?player_id=eq.${encodeURIComponent(playerId)}&limit=1`, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      if (res.ok) {
+        const rows = await res.json();
+        info = rows[0] || null;
+        if (info) playerInfoMap[String(playerId)] = info;
+      }
+    }
+
+    const fullName = (info && getPlayerFullName(playerId)) || fallbackName || 'Unknown';
+    document.getElementById('playerPanelName').textContent   = fullName;
+    document.getElementById('playerPanelAvatar').textContent = getPlayerInitials(fullName);
+
+    if (info) {
+      const tags = [];
+      const role      = info.playing_role    || info.role         || info.player_type  || null;
+      const batStyle  = info.batting_style   || info.batting_hand || info.bat_style    || null;
+      const bowlStyle = info.bowling_style   || info.bowling_type || info.bowl_style   || null;
+      const nationality = info.nationality   || info.country      || info.team_country || null;
+      if (nationality) tags.push(`<span class="meta-tag accent">${nationality}</span>`);
+      if (role)        tags.push(`<span class="meta-tag">${role}</span>`);
+      if (batStyle)    tags.push(`<span class="meta-tag">🏏 ${batStyle}</span>`);
+      if (bowlStyle)   tags.push(`<span class="meta-tag">⚡ ${bowlStyle}</span>`);
+      document.getElementById('playerPanelTags').innerHTML = tags.join('');
+    }
+
+    const sections = [];
+
+    if (info) {
+      const dob = info.date_of_birth || info.dob || null;
+      let age = null;
+      if (dob) { const diff = Date.now() - new Date(dob).getTime(); age = Math.floor(diff / (365.25 * 24 * 60 * 60 * 1000)); }
+      const infoItems = [];
+      const addInfo = (label, val) => { if (val != null && val !== '') infoItems.push({ label, val }); };
+      addInfo('Date of Birth', dob ? new Date(dob).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) : null);
+      addInfo('Age', age ? `${age} years` : null);
+      addInfo('Batting Style',  info.batting_style  || info.batting_hand || info.bat_style);
+      addInfo('Bowling Style',  info.bowling_style  || info.bowling_type || info.bowl_style);
+      addInfo('Playing Role',   info.playing_role   || info.role || info.player_type);
+      addInfo('Nationality',    info.nationality    || info.country || info.team_country);
+      const coveredKeys = new Set(['player_id','full_name','player_name','name','first_name','last_name','date_of_birth','dob','batting_style','batting_hand','bat_style','bowling_style','bowling_type','bowl_style','playing_role','role','player_type','nationality','country','team_country','scraped_at','created_at','updated_at','inserted_at','modified_at','timestamp']);
+      Object.entries(info).forEach(([k, v]) => {
+        if (coveredKeys.has(k) || !v || typeof v === 'object') return;
+        addInfo(k.replace(/_/g,' ').replace(/\b\w/g, c => c.toUpperCase()), v);
+      });
+      if (infoItems.length > 0) {
+        sections.push(`<div class="panel-section"><div class="panel-section-title">Player Info</div><div class="info-grid">${infoItems.map(it => `<div class="info-item"><div class="info-label">${it.label}</div><div class="info-value">${it.val}</div></div>`).join('')}</div></div>`);
+      }
+    }
+
+    const batRows = (rawDataCache.batting || []).filter(r => String(r.batter_id) === String(playerId));
+    if (batRows.length > 0) {
+      let runs=0,balls=0,fours=0,sixes=0,notOuts=0,innings=batRows.length,hs=0,fifties=0,hundreds=0;
+      batRows.forEach(r => {
+        runs+=r.runs||0; balls+=r.balls||0; fours+=r.fours||0; sixes+=r.sixes||0;
+        const dt=(r.dismissal_type||'').toLowerCase().replace(/[\s_-]/g,'');
+        if(dt==='notout'||dt===''||dt==='retired'||dt==='retiredhurt') notOuts++;
+        if((r.runs||0)>=100) hundreds++;
+        else if((r.runs||0)>=50) fifties++;
+        if((r.runs||0)>hs) hs=r.runs;
+      });
+      const dismissals=innings-notOuts;
+      const avg=dismissals>0?(runs/dismissals).toFixed(2):(runs>0?runs:'—');
+      const sr=balls>0?((runs/balls)*100).toFixed(2):'—';
+      const teams=[...new Set(batRows.map(r=>r.batting_team||r.team_name||r.team).filter(Boolean))];
+      sections.push(`<div class="panel-section"><div class="panel-section-title">Batting Career</div><div class="panel-stat-grid"><div class="panel-stat"><div class="ps-label">Innings</div><div class="ps-value">${innings}</div></div><div class="panel-stat"><div class="ps-label">Runs</div><div class="ps-value">${runs}</div></div><div class="panel-stat"><div class="ps-label">HS</div><div class="ps-value">${hs}</div></div><div class="panel-stat"><div class="ps-label">Average</div><div class="ps-value">${avg}</div></div><div class="panel-stat"><div class="ps-label">Strike Rate</div><div class="ps-value">${sr}</div></div><div class="panel-stat"><div class="ps-label">Not Outs</div><div class="ps-value">${notOuts}</div></div><div class="panel-stat"><div class="ps-label">50s</div><div class="ps-value">${fifties}</div></div><div class="panel-stat"><div class="ps-label">100s</div><div class="ps-value">${hundreds}</div></div><div class="panel-stat"><div class="ps-label">4s / 6s</div><div class="ps-value">${fours} / ${sixes}</div></div></div>${teams.length?`<div style="margin-top:10px"><div class="panel-section-title" style="margin-bottom:6px">Teams Batted For</div><div class="teams-list">${teams.map(t=>`<span class="team-tag">${t}</span>`).join('')}</div></div>`:''}</div>`);
+    }
+
+    const bowlRows = (rawDataCache.bowling || []).filter(r => String(r.bowler_id) === String(playerId));
+    if (bowlRows.length > 0) {
+      let overs=0,runs=0,wickets=0,maidens=0,fiveWickets=0,bestWkts=0,bestRuns=999;
+      bowlRows.forEach(r => {
+        overs+=r.overs||0; runs+=r.runs||0; wickets+=r.wickets||0; maidens+=r.maidens||0;
+        if(r.wickets>=5) fiveWickets++;
+        if(r.wickets>bestWkts||(r.wickets===bestWkts&&r.runs<bestRuns)){bestWkts=r.wickets;bestRuns=r.runs;}
+      });
+      const avg=wickets>0?(runs/wickets).toFixed(2):'—';
+      const eco=overs>0?(runs/overs).toFixed(2):'—';
+      const sr=wickets>0?((overs*6)/wickets).toFixed(2):'—';
+      sections.push(`<div class="panel-section"><div class="panel-section-title">Bowling Career</div><div class="panel-stat-grid"><div class="panel-stat"><div class="ps-label">Innings</div><div class="ps-value blue">${bowlRows.length}</div></div><div class="panel-stat"><div class="ps-label">Wickets</div><div class="ps-value blue">${wickets}</div></div><div class="panel-stat"><div class="ps-label">Best</div><div class="ps-value blue">${bestWkts}/${bestRuns}</div></div><div class="panel-stat"><div class="ps-label">Average</div><div class="ps-value blue">${avg}</div></div><div class="panel-stat"><div class="ps-label">Economy</div><div class="ps-value blue">${eco}</div></div><div class="panel-stat"><div class="ps-label">Strike Rate</div><div class="ps-value blue">${sr}</div></div><div class="panel-stat"><div class="ps-label">Overs</div><div class="ps-value blue">${overs.toFixed(1)}</div></div><div class="panel-stat"><div class="ps-label">Maidens</div><div class="ps-value blue">${maidens}</div></div><div class="panel-stat"><div class="ps-label">5-Fors</div><div class="ps-value blue">${fiveWickets}</div></div></div></div>`);
+    }
+
+    const fieldRows2=(rawDataCache.batting||[]).filter(r=>String(r.fielder_id)===String(playerId)||String(r.fielder_id2)===String(playerId));
+    if(fieldRows2.length>0){
+      function normDT2(raw){return!raw?'':raw.toLowerCase().replace(/[\s_\-]/g,'');}
+      const CT=new Set(['caught','c','ct']),KT=new Set(['caughtbehind','wktkprcatch','keepercatch','caughtbehindwicket','cbw','kprcatch','catchkeeper']),ST=new Set(['stumped','st']),ROT=new Set(['runout','ro','run-out']);
+      let catches=0,catchesWk=0,stumpings=0,runOuts=0;
+      fieldRows2.forEach(r=>{
+        const dt=normDT2(r.dismissal_type);
+        if(CT.has(dt)&&String(r.fielder_id)===String(playerId))catches++;
+        else if(KT.has(dt)&&String(r.fielder_id)===String(playerId))catchesWk++;
+        else if(ST.has(dt)&&String(r.fielder_id)===String(playerId))stumpings++;
+        else if(ROT.has(dt)){
+          if(String(r.fielder_id)===String(playerId))runOuts++;
+          if(String(r.fielder_id2)===String(playerId))runOuts++;
+        }
+      });
+      const total=catches+catchesWk+stumpings+runOuts;
+      sections.push(`<div class="panel-section"><div class="panel-section-title">Fielding Career</div><div class="panel-stat-grid"><div class="panel-stat"><div class="ps-label">Total</div><div class="ps-value green">${total}</div></div><div class="panel-stat"><div class="ps-label">Ct (Field)</div><div class="ps-value green">${catches}</div></div><div class="panel-stat"><div class="ps-label">Ct (WK)</div><div class="ps-value green">${catchesWk}</div></div><div class="panel-stat"><div class="ps-label">Stumpings</div><div class="ps-value green">${stumpings}</div></div><div class="panel-stat"><div class="ps-label">Run Outs</div><div class="ps-value green">${runOuts}</div></div></div></div>`);
+    }
+
+    body.innerHTML = sections.length ? sections.join('') : `<div class="panel-error">No career data found for this player in the current dataset.</div>`;
+  } catch(e) {
+    body.innerHTML = `<div class="panel-error">Error loading player details: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>

@@ -9,22 +9,19 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Inject Supabase credentials
+      - name: Inject Supabase credentials into supabase.js
         run: |
-          sed -i "s|%%SUPABASE_URL%%|${{ secrets.SUPABASE_URL }}|g" dashboard.html
-          sed -i "s|%%SUPABASE_ANON_KEY%%|${{ secrets.SUPABASE_ANON_KEY }}|g" dashboard.html
-
-      - name: Prepare output
-        run: |
-          mkdir dist
-          cp dashboard.html dist/index.html
+          sed -i "s|https://YOUR_PROJECT_REF.supabase.co|${{ secrets.SUPABASE_URL }}|g" js/supabase.js
+          sed -i "s|YOUR_ANON_KEY|${{ secrets.SUPABASE_ANON_KEY }}|g" js/supabase.js
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
+          publish_dir: .
           force_orphan: true
+          exclude_assets: '.github,.git'
