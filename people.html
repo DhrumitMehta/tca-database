@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCA Cricket — People</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<style>
+  :root {
+    --bg:#0a0c0f; --surface:#111318; --surface2:#1a1d24;
+    --border:#252830; --accent:#e8ff47; --accent2:#47c8ff;
+    --red:#ff5252; --green:#4ade80; --text:#f0f2f5;
+    --muted:#6b7280; --muted2:#9ca3af;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  body::before {
+    content:''; position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232,255,71,0.03) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(255,255,255,0.012) 80px),
+      repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(255,255,255,0.012) 80px);
+    pointer-events:none; z-index:0;
+  }
+
+  header {
+    background:var(--surface); border-bottom:1px solid var(--border);
+    padding:0 2rem; display:flex; align-items:center;
+    justify-content:space-between; height:64px;
+    position:sticky; top:0; z-index:100;
+  }
+  .logo { display:flex; align-items:center; gap:12px; text-decoration:none; }
+  .logo-icon { width:36px; height:36px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .logo h1 { font-family:'Bebas Neue',sans-serif; font-size:1.6rem; letter-spacing:2px; color:var(--text); }
+  .logo span { font-size:0.75rem; color:var(--muted); font-weight:300; letter-spacing:1px; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+
+  .container { max-width:1300px; margin:0 auto; padding:2rem; position:relative; z-index:1; }
+
+  /* PAGE HEADER */
+  .page-header {
+    display:flex; align-items:flex-start; justify-content:space-between;
+    margin-bottom:2rem; flex-wrap:wrap; gap:1rem;
+  }
+  .page-header h2 { font-family:'Bebas Neue',sans-serif; font-size:2rem; letter-spacing:2px; line-height:1; }
+  .page-header p { font-size:0.875rem; color:var(--muted2); margin-top:4px; }
+
+  /* BUTTONS */
+  .btn { padding:9px 16px; border-radius:8px; font-size:0.875rem; font-weight:500; cursor:pointer; border:none; font-family:'DM Sans',sans-serif; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#000; font-weight:600; }
+  .btn-primary:hover { background:#d4eb3a; }
+  .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--muted2); color:var(--text); }
+  .btn-danger { background:rgba(255,82,82,0.08); color:var(--red); border:1px solid rgba(255,82,82,0.15); }
+  .btn-danger:hover { background:rgba(255,82,82,0.15); }
+  .btn-sm { padding:6px 12px; font-size:0.8rem; }
+
+  /* TOOLBAR */
+  .toolbar {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:1.25rem; flex-wrap:wrap;
+  }
+  .search-wrap { position:relative; flex:1; min-width:200px; max-width:340px; }
+  .search-wrap input {
+    width:100%; background:var(--surface); border:1px solid var(--border);
+    color:var(--text); padding:9px 12px 9px 36px; border-radius:8px;
+    font-size:0.875rem; font-family:'DM Sans',sans-serif; outline:none;
+    transition:border-color 0.2s;
+  }
+  .search-wrap input:focus { border-color:var(--accent); }
+  .search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; }
+
+  select {
+    background:var(--surface); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:0.875rem;
+    font-family:'DM Sans',sans-serif; outline:none; cursor:pointer;
+    transition:border-color 0.2s;
+  }
+  select:focus { border-color:var(--accent); }
+
+  .count-badge {
+    font-size:0.75rem; color:var(--muted2); margin-left:auto;
+    white-space:nowrap;
+  }
+  .count-badge span { color:var(--accent); font-weight:600; }
+
+  /* SUMMARY CARDS */
+  .summary-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; margin-bottom:1.5rem; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; }
+  .stat-card .label { font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:4px; }
+  .stat-card .value { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; line-height:1; color:var(--accent); }
+  .stat-card .sub { font-size:0.72rem; color:var(--muted2); margin-top:2px; }
+
+  /* PEOPLE GRID */
+  .people-grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(300px,1fr));
+    gap:12px;
+  }
+
+  .person-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:1.25rem;
+    display:flex; flex-direction:column; gap:10px;
+    transition:border-color 0.2s;
+  }
+  .person-card:hover { border-color:rgba(232,255,71,0.25); }
+
+  .person-card-top { display:flex; align-items:flex-start; gap:12px; }
+  .person-avatar {
+    width:44px; height:44px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Bebas Neue',sans-serif; font-size:1rem; letter-spacing:1px;
+    border:1px solid var(--border);
+  }
+  .person-avatar.umpire   { background:rgba(232,255,71,0.12); color:var(--accent); border-color:rgba(232,255,71,0.2); }
+  .person-avatar.coach    { background:rgba(71,200,255,0.12); color:var(--accent2); border-color:rgba(71,200,255,0.2); }
+  .person-avatar.staff    { background:rgba(74,222,128,0.12); color:var(--green); border-color:rgba(74,222,128,0.2); }
+  .person-avatar.default  { background:var(--surface2); color:var(--muted2); }
+
+  .person-info { flex:1; min-width:0; }
+  .person-name { font-weight:600; font-size:0.95rem; color:var(--text); line-height:1.2; }
+  .person-role-line { font-size:0.78rem; color:var(--muted2); margin-top:3px; }
+
+  .person-tags { display:flex; gap:6px; flex-wrap:wrap; }
+  .tag {
+    font-size:0.65rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;
+    border-radius:4px; padding:2px 7px; border:1px solid;
+  }
+  .tag-umpire   { background:rgba(232,255,71,0.08); color:var(--accent);  border-color:rgba(232,255,71,0.2); }
+  .tag-coach    { background:rgba(71,200,255,0.08); color:var(--accent2); border-color:rgba(71,200,255,0.2); }
+  .tag-staff    { background:rgba(74,222,128,0.08); color:var(--green);   border-color:rgba(74,222,128,0.2); }
+  .tag-inactive { background:rgba(255,82,82,0.08);  color:var(--red);     border-color:rgba(255,82,82,0.2); }
+  .tag-neutral  { background:var(--surface2); color:var(--muted2); border-color:var(--border); }
+
+  .person-details {
+    display:grid; grid-template-columns:1fr 1fr; gap:6px;
+    border-top:1px solid var(--border); padding-top:10px;
+  }
+  .detail-item .detail-label { font-size:0.62rem; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); }
+  .detail-item .detail-value { font-size:0.8rem; color:var(--text); margin-top:1px; font-weight:500; }
+  .detail-item.full { grid-column:span 2; }
+
+  .person-card-actions {
+    display:flex; gap:6px; border-top:1px solid var(--border); padding-top:10px;
+  }
+
+  /* EMPTY / LOADING */
+  .state-msg { text-align:center; padding:4rem 2rem; color:var(--muted2); }
+  .state-msg .icon { font-size:2.5rem; margin-bottom:1rem; }
+  .state-msg h3 { font-size:1rem; color:var(--text); margin-bottom:6px; }
+  .state-msg p { font-size:0.875rem; line-height:1.6; }
+  .spinner { width:28px; height:28px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; margin:0 auto 1rem; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); z-index:200; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s; padding:1rem; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:2rem; width:580px; max-width:100%; max-height:90vh;
+    overflow-y:auto; display:flex; flex-direction:column; gap:0;
+  }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .modal-header h2 { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:2px; }
+  .modal-close { background:var(--surface2); border:1px solid var(--border); color:var(--muted2); width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+  .modal-close:hover { border-color:var(--red); color:var(--red); }
+
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:span 2; }
+  .form-group label { font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted2); }
+  .form-group input, .form-group select, .form-group textarea {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:0.875rem;
+    font-family:'DM Sans',sans-serif; outline:none; transition:border-color 0.2s; width:100%;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color:var(--accent); }
+  .form-group textarea { resize:vertical; min-height:72px; }
+
+  .form-section-label {
+    font-size:0.65rem; text-transform:uppercase; letter-spacing:2px;
+    color:var(--muted); font-weight:700; margin:1.25rem 0 0.75rem;
+    display:flex; align-items:center; gap:8px; grid-column:span 2;
+  }
+  .form-section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:1.5rem; }
+
+  .alert { border-radius:8px; padding:10px 14px; font-size:0.85rem; margin-top:0.75rem; }
+  .alert-error   { background:rgba(255,82,82,0.08);  border:1px solid rgba(255,82,82,0.2);  color:#ffaaaa; }
+  .alert-success { background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); color:#86efac; }
+
+  /* CONFIRM DELETE */
+  .confirm-modal { width:400px; }
+  .confirm-modal p { font-size:0.875rem; color:var(--muted2); line-height:1.6; margin-bottom:1.5rem; }
+  .confirm-modal strong { color:var(--text); }
+
+  @media (max-width:640px) {
+    .container { padding:1rem; }
+    header { padding:0 1rem; }
+    .logo h1 { font-size:1.3rem; }
+    .people-grid { grid-template-columns:1fr; }
+    .form-grid { grid-template-columns:1fr; }
+    .form-group.full { grid-column:span 1; }
+    .form-section-label { grid-column:span 1; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="dashboard.html">
+    <div class="logo-icon">🏏</div>
+    <div>
+      <h1>TCA CRICKET</h1>
+      <span>Association Portal</span>
+    </div>
+  </a>
+  <div class="header-right">
+    <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'">← Dashboard</button>
+    <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign Out</button>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="page-header">
+    <div>
+      <h2>People Directory</h2>
+      <p>Umpires, coaches and NGB paid staff</p>
+    </div>
+    <button class="btn btn-primary" id="addPersonBtn" onclick="openAddModal()">+ Add Person</button>
+  </div>
+
+  <!-- SUMMARY -->
+  <div class="summary-row" id="summaryRow">
+    <div class="stat-card"><div class="label">Total</div><div class="value" id="statTotal">—</div><div class="sub">registered</div></div>
+    <div class="stat-card"><div class="label">Umpires</div><div class="value" id="statUmpires">—</div><div class="sub">in database</div></div>
+    <div class="stat-card"><div class="label">Coaches</div><div class="value" id="statCoaches">—</div><div class="sub">in database</div></div>
+    <div class="stat-card"><div class="label">NGB Staff</div><div class="value" id="statStaff">—</div><div class="sub">in database</div></div>
+    <div class="stat-card"><div class="label">Active</div><div class="value" id="statActive">—</div><div class="sub">currently active</div></div>
+  </div>
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search name, role, region…" oninput="renderPeople()">
+    </div>
+    <select id="filterRole" onchange="renderPeople()">
+      <option value="">All Roles</option>
+      <option value="umpire">Umpires</option>
+      <option value="coach">Coaches</option>
+      <option value="staff">NGB Staff</option>
+    </select>
+    <select id="filterActive" onchange="renderPeople()">
+      <option value="">All Statuses</option>
+      <option value="yes">Active</option>
+      <option value="no">Inactive</option>
+    </select>
+    <select id="filterRegion" onchange="renderPeople()">
+      <option value="">All Regions</option>
+    </select>
+    <span class="count-badge"><span id="countShown">0</span> shown</span>
+  </div>
+
+  <!-- PEOPLE GRID -->
+  <div id="peopleContainer">
+    <div class="state-msg"><div class="spinner"></div><p>Loading people…</p></div>
+  </div>
+
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-overlay" id="personModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add Person</h2>
+      <button class="modal-close" onclick="closePersonModal()">✕</button>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-section-label">Basic Info</div>
+
+      <div class="form-group">
+        <label>First Name *</label>
+        <input type="text" id="f_first_name" placeholder="e.g. James">
+      </div>
+      <div class="form-group">
+        <label>Last Name *</label>
+        <input type="text" id="f_last_name" placeholder="e.g. Mwangi">
+      </div>
+      <div class="form-group">
+        <label>Gender</label>
+        <select id="f_gender">
+          <option value="">— select —</option>
+          <option>Male</option>
+          <option>Female</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Country</label>
+        <input type="text" id="f_country" placeholder="e.g. Tanzania">
+      </div>
+      <div class="form-group">
+        <label>Nationality</label>
+        <input type="text" id="f_nationality" placeholder="e.g. Tanzanian">
+      </div>
+      <div class="form-group">
+        <label>Region</label>
+        <input type="text" id="f_region" placeholder="e.g. Dar es Salaam">
+      </div>
+
+      <div class="form-section-label">Role &amp; Status</div>
+
+      <div class="form-group">
+        <label>Role *</label>
+        <select id="f_role">
+          <option value="">— select —</option>
+          <option value="umpire">Umpire</option>
+          <option value="coach">Coach</option>
+          <option value="staff">NGB Staff</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Currently Active</label>
+        <select id="f_currently_active">
+          <option value="yes">Yes</option>
+          <option value="no">No</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Job Description</label>
+        <input type="text" id="f_job_description" placeholder="e.g. Regional Umpire, Head Coach U19s">
+      </div>
+
+      <div class="form-section-label">Qualifications</div>
+
+      <div class="form-group full">
+        <label>Certifications</label>
+        <input type="text" id="f_certifications" placeholder="e.g. ICC Level 2 Umpire">
+      </div>
+      <div class="form-group">
+        <label>Highest Qualification</label>
+        <input type="text" id="f_highest_qualification" placeholder="e.g. Level 3 Coach">
+      </div>
+      <div class="form-group">
+        <label>Course</label>
+        <input type="text" id="f_course" placeholder="e.g. ICC Coaching Pathway">
+      </div>
+      <div class="form-group">
+        <label>Date First Qualification</label>
+        <input type="date" id="f_date_first_qualification">
+      </div>
+      <div class="form-group">
+        <label>Date Highest Qualification</label>
+        <input type="date" id="f_date_highest_qualification">
+      </div>
+      <div class="form-group">
+        <label>Teacher / Coach</label>
+        <input type="text" id="f_teacher_coach" placeholder="Name of teacher or coach">
+      </div>
+
+      <div class="form-section-label">Background</div>
+
+      <div class="form-group full">
+        <label>Past Experience</label>
+        <textarea id="f_past_experience" placeholder="Previous roles, teams, experience…"></textarea>
+      </div>
+    </div>
+
+    <div id="modalAlert" style="display:none" class="alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePersonModal()">Cancel</button>
+      <button class="btn btn-primary" id="savePersonBtn" onclick="savePerson()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE MODAL -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal confirm-modal">
+    <div class="modal-header">
+      <h2>Remove Person</h2>
+      <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+    </div>
+    <p>Are you sure you want to remove <strong id="confirmName">this person</strong> from the directory? This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allPeople = [];
+  let editingId = null;
+  let deletingId = null;
+
+  // ── INIT ──────────────────────────────────────────────────
+  async function init() {
+    const profile = await requireAuth(['board']);
+    if (!profile) return;
+    await loadPeople();
+  }
+
+  // ── LOAD ──────────────────────────────────────────────────
+  async function loadPeople() {
+    try {
+      const { data, error } = await window.supabase
+        .from('tca_db_people_record')
+        .select('*')
+        .order('last_name', { ascending: true });
+
+      if (error) throw error;
+      allPeople = data || [];
+      buildRegionFilter();
+      updateSummary();
+      renderPeople();
+    } catch(e) {
+      document.getElementById('peopleContainer').innerHTML = `
+        <div class="state-msg">
+          <div class="icon">⚠️</div>
+          <h3>Could not load people</h3>
+          <p>${e.message}</p>
+        </div>`;
+    }
+  }
+
+  // ── FILTERS & RENDER ──────────────────────────────────────
+  function buildRegionFilter() {
+    const regions = [...new Set(allPeople.map(p => p.region).filter(Boolean))].sort();
+    const sel = document.getElementById('filterRegion');
+    regions.forEach(r => {
+      const opt = document.createElement('option');
+      opt.value = r; opt.textContent = r;
+      sel.appendChild(opt);
+    });
+  }
+
+  function updateSummary() {
+    const umpires = allPeople.filter(p => roleCategory(p.role) === 'umpire').length;
+    const coaches  = allPeople.filter(p => roleCategory(p.role) === 'coach').length;
+    const staff    = allPeople.filter(p => roleCategory(p.role) === 'staff').length;
+    const active   = allPeople.filter(p => (p.currently_active || '').toLowerCase() === 'yes').length;
+    document.getElementById('statTotal').textContent   = allPeople.length;
+    document.getElementById('statUmpires').textContent = umpires;
+    document.getElementById('statCoaches').textContent = coaches;
+    document.getElementById('statStaff').textContent   = staff;
+    document.getElementById('statActive').textContent  = active;
+  }
+
+  function roleCategory(role) {
+    if (!role) return 'default';
+    const r = role.toLowerCase();
+    if (r.includes('umpire')) return 'umpire';
+    if (r.includes('coach') || r.includes('trainer')) return 'coach';
+    if (r.includes('staff') || r.includes('admin') || r.includes('manager') || r.includes('officer') || r.includes('director') || r.includes('coordinator')) return 'staff';
+    return 'default';
+  }
+
+  function renderPeople() {
+    const search      = document.getElementById('searchInput').value.toLowerCase();
+    const filterRole  = document.getElementById('filterRole').value;
+    const filterActive = document.getElementById('filterActive').value;
+    const filterRegion = document.getElementById('filterRegion').value;
+
+    const filtered = allPeople.filter(p => {
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
+      const searchMatch = !search ||
+        fullName.includes(search) ||
+        (p.role || '').toLowerCase().includes(search) ||
+        (p.region || '').toLowerCase().includes(search) ||
+        (p.job_description || '').toLowerCase().includes(search) ||
+        (p.certifications || '').toLowerCase().includes(search);
+
+      const cat = roleCategory(p.role);
+      const roleMatch   = !filterRole   || cat === filterRole;
+      const activeMatch = !filterActive || (p.currently_active || '').toLowerCase() === filterActive;
+      const regionMatch = !filterRegion || p.region === filterRegion;
+
+      return searchMatch && roleMatch && activeMatch && regionMatch;
+    });
+
+    document.getElementById('countShown').textContent = filtered.length;
+
+    if (filtered.length === 0) {
+      document.getElementById('peopleContainer').innerHTML = `
+        <div class="state-msg">
+          <div class="icon">🔍</div>
+          <h3>No results</h3>
+          <p>Try adjusting your search or filters.</p>
+        </div>`;
+      return;
+    }
+
+    document.getElementById('peopleContainer').innerHTML = `
+      <div class="people-grid">
+        ${filtered.map(p => personCard(p)).join('')}
+      </div>`;
+  }
+
+  function personCard(p) {
+    const cat      = roleCategory(p.role);
+    const fullName = [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Unknown';
+    const initials = fullName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const isActive = (p.currently_active || '').toLowerCase() === 'yes';
+
+    const tagClass  = { umpire:'tag-umpire', coach:'tag-coach', staff:'tag-staff', default:'tag-neutral' }[cat];
+    const tagLabel  = { umpire:'Umpire', coach:'Coach', staff:'NGB Staff', default:'Other' }[cat];
+
+    const details = [];
+    if (p.region)               details.push({ label:'Region',       value:p.region });
+    if (p.country)              details.push({ label:'Country',       value:p.country });
+    if (p.certifications)       details.push({ label:'Certifications', value:p.certifications, full:true });
+    if (p.highest_qualification) details.push({ label:'Highest Qual', value:p.highest_qualification });
+    if (p.date_highest_qualification) details.push({ label:'Qualified', value:formatDate(p.date_highest_qualification) });
+    if (p.course)               details.push({ label:'Course',        value:p.course });
+
+    const detailsHTML = details.length ? `
+      <div class="person-details">
+        ${details.map(d => `
+          <div class="detail-item${d.full ? ' full' : ''}">
+            <div class="detail-label">${d.label}</div>
+            <div class="detail-value">${esc(d.value)}</div>
+          </div>`).join('')}
+      </div>` : '';
+
+    return `
+      <div class="person-card">
+        <div class="person-card-top">
+          <div class="person-avatar ${cat}">${initials}</div>
+          <div class="person-info">
+            <div class="person-name">${esc(fullName)}</div>
+            <div class="person-role-line">${esc(p.job_description || p.role || '—')}</div>
+          </div>
+        </div>
+        <div class="person-tags">
+          <span class="tag ${tagClass}">${tagLabel}</span>
+          ${!isActive ? '<span class="tag tag-inactive">Inactive</span>' : ''}
+          ${p.gender ? `<span class="tag tag-neutral">${esc(p.gender)}</span>` : ''}
+          ${p.nationality ? `<span class="tag tag-neutral">${esc(p.nationality)}</span>` : ''}
+        </div>
+        ${detailsHTML}
+        <div class="person-card-actions">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openEditModal(${p.id})">✏ Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="openConfirmDelete(${p.id}, '${esc(fullName)}')">🗑</button>
+        </div>
+      </div>`;
+  }
+
+  // ── ADD / EDIT MODAL ──────────────────────────────────────
+  const FIELDS = ['first_name','last_name','gender','country','nationality','region','role',
+    'currently_active','job_description','certifications','highest_qualification','course',
+    'date_first_qualification','date_highest_qualification','teacher_coach','past_experience'];
+
+  function openAddModal() {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'Add Person';
+    document.getElementById('savePersonBtn').textContent = 'Add Person';
+    FIELDS.forEach(f => {
+      const el = document.getElementById('f_' + f);
+      if (el) el.value = f === 'currently_active' ? 'yes' : '';
+    });
+    showModalAlert('', '');
+    document.getElementById('personModal').classList.add('open');
+    setTimeout(() => document.getElementById('f_first_name').focus(), 80);
+  }
+
+  function openEditModal(id) {
+    const p = allPeople.find(x => x.id === id);
+    if (!p) return;
+    editingId = id;
+    document.getElementById('modalTitle').textContent = 'Edit Person';
+    document.getElementById('savePersonBtn').textContent = 'Save Changes';
+    FIELDS.forEach(f => {
+      const el = document.getElementById('f_' + f);
+      if (!el) return;
+      el.value = p[f] != null ? p[f] : '';
+    });
+    showModalAlert('', '');
+    document.getElementById('personModal').classList.add('open');
+    setTimeout(() => document.getElementById('f_first_name').focus(), 80);
+  }
+
+  function closePersonModal() {
+    document.getElementById('personModal').classList.remove('open');
+    editingId = null;
+  }
+
+  async function savePerson() {
+    const firstName = document.getElementById('f_first_name').value.trim();
+    const lastName  = document.getElementById('f_last_name').value.trim();
+    const role      = document.getElementById('f_role').value;
+
+    if (!firstName || !lastName) { showModalAlert('First and last name are required.', 'error'); return; }
+    if (!role)                    { showModalAlert('Please select a role.', 'error'); return; }
+
+    const btn = document.getElementById('savePersonBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const payload = {};
+    FIELDS.forEach(f => {
+      const el = document.getElementById('f_' + f);
+      if (!el) return;
+      const val = el.value.trim();
+      payload[f] = val === '' ? null : val;
+    });
+
+    try {
+      let error;
+      if (editingId) {
+        ({ error } = await window.supabase
+          .from('tca_db_people_record')
+          .update(payload)
+          .eq('id', editingId));
+      } else {
+        ({ error } = await window.supabase
+          .from('tca_db_people_record')
+          .insert(payload));
+      }
+      if (error) throw error;
+      closePersonModal();
+      await loadPeople();
+    } catch(e) {
+      showModalAlert(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = editingId ? 'Save Changes' : 'Add Person';
+    }
+  }
+
+  function showModalAlert(msg, type) {
+    const el = document.getElementById('modalAlert');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.textContent = msg;
+    el.className = `alert alert-${type}`;
+    el.style.display = 'block';
+  }
+
+  // ── DELETE ────────────────────────────────────────────────
+  function openConfirmDelete(id, name) {
+    deletingId = id;
+    document.getElementById('confirmName').textContent = name;
+    document.getElementById('confirmModal').classList.add('open');
+  }
+
+  function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('open');
+    deletingId = null;
+  }
+
+  async function confirmDelete() {
+    if (!deletingId) return;
+    const btn = document.getElementById('confirmDeleteBtn');
+    btn.disabled = true;
+    btn.textContent = 'Removing…';
+    try {
+      const { error } = await window.supabase
+        .from('tca_db_people_record')
+        .delete()
+        .eq('id', deletingId);
+      if (error) throw error;
+      closeConfirmModal();
+      await loadPeople();
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Remove';
+    }
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '—';
+    try { return new Date(dateStr).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }); }
+    catch { return dateStr; }
+  }
+
+  async function doSignOut() {
+    await window.supabase.auth.signOut();
+    window.location.href = 'index.html';
+  }
+
+  // Close modals on outside click
+  document.getElementById('personModal').addEventListener('click', e => { if (e.target === e.currentTarget) closePersonModal(); });
+  document.getElementById('confirmModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConfirmModal(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closePersonModal(); closeConfirmModal(); }
+  });
+
+  init();
+</script>
+</body>
+</html>
