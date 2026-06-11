@@ -14,13 +14,13 @@ jobs:
 
       - name: Inject Supabase credentials
         run: |
-          sed -i "s|%%SUPABASE_URL%%|${{ secrets.SUPABASE_URL }}|g" stats.html
-          sed -i "s|%%SUPABASE_ANON_KEY%%|${{ secrets.SUPABASE_ANON_KEY }}|g" stats.html
+          sed -i "s|%%SUPABASE_URL%%|${{ secrets.SUPABASE_URL }}|g" dashboard.html
+          sed -i "s|%%SUPABASE_ANON_KEY%%|${{ secrets.SUPABASE_ANON_KEY }}|g" dashboard.html
 
       - name: Prepare output
         run: |
           mkdir dist
-          cp stats.html dist/index.html
+          cp dashboard.html dist/index.html
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
