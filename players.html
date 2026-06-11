@@ -1,0 +1,52 @@
+<!-- Example: players.html — protected page for coaches and board -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Players</title>
+  <link rel="stylesheet" href="css/shared.css">
+</head>
+<body>
+
+  <!-- Nav is injected here automatically by auth.js -->
+  <div id="nav-container"></div>
+
+  <main id="page-content" style="display:none">
+    <h1>Players</h1>
+    <!-- Your player list/editor goes here -->
+  </main>
+
+  <script type="module">
+    import './js/supabase.js';   // sets window.supabase
+    import './js/auth.js';       // sets window.requireAuth etc.
+
+    // requireAuth returns the profile if authorised, or redirects and returns null
+    const profile = await requireAuth(['board', 'national_coach', 'regional_coach']);
+    if (!profile) return;  // redirected — stop here
+
+    // Now safe to show the page
+    document.getElementById('page-content').style.display = 'block';
+
+    // Regional coaches only see their own region
+    let query = supabase.from('players').select('*');
+
+    if (profile.role === 'national_coach') {
+      query = query.eq('squad', 'national');
+    } else if (profile.role === 'regional_coach') {
+      query = query.eq('region', profile.region);
+    }
+    // board: no filter — sees everyone
+
+    const { data: players, error } = await query;
+
+    if (error) {
+      console.error('Error loading players:', error.message);
+      return;
+    }
+
+    // Render players...
+    console.log('Loaded players:', players);
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCA Cricket — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0c0f; --surface:#111318; --surface2:#1a1d24;
+    --border:#252830; --accent:#e8ff47; --accent2:#47c8ff;
+    --red:#ff5252; --green:#4ade80; --text:#f0f2f5;
+    --muted:#6b7280; --muted2:#9ca3af;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'DM Sans',sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── BACKGROUND FIELD LINES ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 100%, rgba(232,255,71,0.04) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(255,255,255,0.015) 80px),
+      repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(255,255,255,0.015) 80px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .login-wrap {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 420px;
+    padding: 1rem;
+  }
+
+  .login-brand {
+    text-align: center;
+    margin-bottom: 2.5rem;
+  }
+
+  .brand-icon {
+    width: 60px;
+    height: 60px;
+    background: var(--accent);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 28px;
+    margin: 0 auto 1rem;
+  }
+
+  .brand-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.2rem;
+    letter-spacing: 3px;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .brand-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .login-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+  }
+
+  .login-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 1.5rem;
+  }
+
+  .login-tab {
+    flex: 1;
+    padding: 7px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted2);
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s;
+  }
+  .login-tab.active { background: var(--accent); color: #000; }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .form-group { margin-bottom: 1rem; }
+  .form-label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted2);
+    margin-bottom: 6px;
+  }
+
+  .form-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .form-input:focus { border-color: var(--accent); }
+  .form-input.error { border-color: var(--red); }
+
+  .btn {
+    width: 100%;
+    padding: 11px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #d4eb3a; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted2); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--muted2); }
+
+  .alert {
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  .alert-error   { background: rgba(255,82,82,0.08);  border: 1px solid rgba(255,82,82,0.2);  color: #ffaaaa; }
+  .alert-success { background: rgba(74,222,128,0.08); border: 1px solid rgba(74,222,128,0.2); color: #86efac; }
+  .alert-info    { background: rgba(71,200,255,0.08); border: 1px solid rgba(71,200,255,0.2); color: #93d5ff; }
+
+  .forgot-link {
+    text-align: right;
+    margin-top: -4px;
+    margin-bottom: 0.5rem;
+  }
+  .forgot-link a {
+    font-size: 0.78rem;
+    color: var(--muted2);
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .forgot-link a:hover { color: var(--accent); }
+
+  .login-footer {
+    text-align: center;
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .spinner-sm {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(0,0,0,0.3);
+    border-top-color: #000;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Password strength bar */
+  .pw-strength { margin-top: 4px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .pw-strength-bar { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; width: 0%; }
+</style>
+</head>
+<body>
+
+<div class="login-wrap">
+  <div class="login-brand">
+    <div class="brand-icon">🏏</div>
+    <div class="brand-title">TCA Cricket</div>
+    <div class="brand-sub">Association Portal</div>
+  </div>
+
+  <div class="login-card">
+    <div id="loginMsg" style="display:none" class="alert alert-info"></div>
+    <div id="alertBox" style="display:none" class="alert"></div>
+
+    <!-- TABS -->
+    <div class="login-tabs">
+      <button class="login-tab active" onclick="switchLoginTab('signin')">Sign In</button>
+      <button class="login-tab" onclick="switchLoginTab('reset')">Reset Password</button>
+    </div>
+
+    <!-- SIGN IN -->
+    <div class="tab-panel active" id="tab-signin">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="signInEmail" class="form-input" placeholder="you@example.com"
+               onkeydown="if(event.key==='Enter') signIn()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="signInPw" class="form-input" placeholder="••••••••"
+               onkeydown="if(event.key==='Enter') signIn()">
+      </div>
+      <div class="forgot-link">
+        <a onclick="switchLoginTab('reset')">Forgot password?</a>
+      </div>
+      <button class="btn btn-primary" id="signInBtn" onclick="signIn()">
+        Sign In
+      </button>
+    </div>
+
+    <!-- RESET PASSWORD -->
+    <div class="tab-panel" id="tab-reset">
+      <p style="font-size:0.85rem;color:var(--muted2);margin-bottom:1rem;line-height:1.5">
+        Enter your email and we'll send you a link to reset your password.
+      </p>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input type="email" id="resetEmail" class="form-input" placeholder="you@example.com"
+               onkeydown="if(event.key==='Enter') sendReset()">
+      </div>
+      <button class="btn btn-primary" id="resetBtn" onclick="sendReset()">Send Reset Link</button>
+      <button class="btn btn-ghost" onclick="switchLoginTab('signin')" style="margin-top:8px">← Back to Sign In</button>
+    </div>
+  </div>
+
+  <div class="login-footer">
+    TCA Cricket Association · Portal v2.0<br>
+    Contact your administrator to request access.
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-client.js"></script>
+<script>
+
+// Show any session message (e.g. "Account setup incomplete")
+window.addEventListener('DOMContentLoaded', () => {
+  const msg = sessionStorage.getItem('loginMsg');
+  if (msg) {
+    sessionStorage.removeItem('loginMsg');
+    const el = document.getElementById('loginMsg');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  // If already signed in, go to dashboard
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) window.location.href = 'dashboard.html';
+  });
+});
+
+function switchLoginTab(tab) {
+  document.querySelectorAll('.login-tab').forEach((t, i) => {
+    t.classList.toggle('active', (i === 0 && tab === 'signin') || (i === 1 && tab === 'reset'));
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  hideAlert();
+}
+
+function showAlert(msg, type = 'error') {
+  const el = document.getElementById('alertBox');
+  el.textContent = msg;
+  el.className = `alert alert-${type}`;
+  el.style.display = 'block';
+}
+function hideAlert() { document.getElementById('alertBox').style.display = 'none'; }
+
+async function signIn() {
+  const email = document.getElementById('signInEmail').value.trim();
+  const pw    = document.getElementById('signInPw').value;
+  if (!email || !pw) { showAlert('Please enter your email and password.'); return; }
+  const btn = document.getElementById('signInBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-sm"></div> Signing in…';
+  hideAlert();
+  const { error } = await supabase.auth.signInWithPassword({ email, password: pw });
+  if (error) {
+    showAlert(error.message);
+    btn.disabled = false;
+    btn.innerHTML = 'Sign In';
+  } else {
+    btn.innerHTML = '✓ Redirecting…';
+    window.location.href = 'dashboard.html';
+  }
+}
+
+async function sendReset() {
+  const email = document.getElementById('resetEmail').value.trim();
+  if (!email) { showAlert('Please enter your email address.'); return; }
+  const btn = document.getElementById('resetBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner-sm"></div> Sending…';
+  hideAlert();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname.replace('index.html','') + 'profile.html?reset=1',
+  });
+  btn.disabled = false;
+  btn.innerHTML = 'Send Reset Link';
+  if (error) showAlert(error.message);
+  else showAlert('Reset link sent! Check your inbox.', 'success');
+}
+</script>
+</body>
+</html>
