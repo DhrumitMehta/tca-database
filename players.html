@@ -1,52 +1,889 @@
-<!-- Example: players.html — protected page for coaches and board -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Players</title>
-  <link rel="stylesheet" href="css/shared.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCA Cricket — Players</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<style>
+  :root {
+    --bg:#0a0c0f; --surface:#111318; --surface2:#1a1d24;
+    --border:#252830; --accent:#e8ff47; --accent2:#47c8ff;
+    --red:#ff5252; --green:#4ade80; --text:#f0f2f5;
+    --muted:#6b7280; --muted2:#9ca3af;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  body::before {
+    content:''; position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(232,255,71,0.03) 0%, transparent 70%),
+      repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(255,255,255,0.012) 80px),
+      repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(255,255,255,0.012) 80px);
+    pointer-events:none; z-index:0;
+  }
+
+  header {
+    background:var(--surface); border-bottom:1px solid var(--border);
+    padding:0 2rem; display:flex; align-items:center;
+    justify-content:space-between; height:64px;
+    position:sticky; top:0; z-index:100;
+  }
+  .logo { display:flex; align-items:center; gap:12px; text-decoration:none; }
+  .logo-icon { width:36px; height:36px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  .logo h1 { font-family:'Bebas Neue',sans-serif; font-size:1.6rem; letter-spacing:2px; color:var(--text); }
+  .logo span { font-size:0.75rem; color:var(--muted); font-weight:300; letter-spacing:1px; text-transform:uppercase; }
+  .header-right { display:flex; align-items:center; gap:10px; }
+
+  .container { max-width:1400px; margin:0 auto; padding:2rem; position:relative; z-index:1; }
+
+  /* PAGE HEADER */
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+  .page-header h2 { font-family:'Bebas Neue',sans-serif; font-size:2rem; letter-spacing:2px; line-height:1; }
+  .page-header p { font-size:0.875rem; color:var(--muted2); margin-top:4px; }
+  .page-header-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+
+  /* BUTTONS */
+  .btn { padding:9px 16px; border-radius:8px; font-size:0.875rem; font-weight:500; cursor:pointer; border:none; font-family:'DM Sans',sans-serif; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .btn-primary { background:var(--accent); color:#000; font-weight:600; }
+  .btn-primary:hover { background:#d4eb3a; }
+  .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border); }
+  .btn-ghost:hover { border-color:var(--muted2); color:var(--text); }
+  .btn-danger { background:rgba(255,82,82,0.08); color:var(--red); border:1px solid rgba(255,82,82,0.15); }
+  .btn-danger:hover { background:rgba(255,82,82,0.15); }
+  .btn-sm { padding:6px 12px; font-size:0.8rem; }
+
+  /* SUMMARY */
+  .summary-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-bottom:1.5rem; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; }
+  .stat-card .label { font-size:0.65rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin-bottom:4px; }
+  .stat-card .value { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; line-height:1; color:var(--accent); }
+  .stat-card .sub { font-size:0.72rem; color:var(--muted2); margin-top:2px; }
+
+  /* TOOLBAR */
+  .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:1.25rem; flex-wrap:wrap; }
+  .search-wrap { position:relative; flex:1; min-width:200px; max-width:340px; }
+  .search-wrap input { width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:9px 12px 9px 36px; border-radius:8px; font-size:0.875rem; font-family:'DM Sans',sans-serif; outline:none; transition:border-color 0.2s; }
+  .search-wrap input:focus { border-color:var(--accent); }
+  .search-icon { position:absolute; left:11px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:14px; }
+  select { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:9px 12px; border-radius:8px; font-size:0.875rem; font-family:'DM Sans',sans-serif; outline:none; cursor:pointer; transition:border-color 0.2s; }
+  select:focus { border-color:var(--accent); }
+  .view-toggle { display:flex; background:var(--surface); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .view-btn { padding:8px 12px; background:transparent; border:none; color:var(--muted2); cursor:pointer; font-size:14px; transition:all 0.15s; }
+  .view-btn.active { background:var(--surface2); color:var(--accent); }
+  .count-badge { font-size:0.75rem; color:var(--muted2); margin-left:auto; white-space:nowrap; }
+  .count-badge span { color:var(--accent); font-weight:600; }
+
+  /* SCOPE BANNER */
+  .scope-banner {
+    background:rgba(71,200,255,0.06); border:1px solid rgba(71,200,255,0.2);
+    border-radius:8px; padding:10px 14px; margin-bottom:1.25rem;
+    font-size:0.82rem; color:var(--accent2); display:none;
+    align-items:center; gap:8px;
+  }
+  .scope-banner.visible { display:flex; }
+
+  /* GRID VIEW */
+  .players-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+
+  .player-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:1.25rem; display:flex; flex-direction:column; gap:10px;
+    transition:border-color 0.2s;
+  }
+  .player-card:hover { border-color:rgba(232,255,71,0.25); }
+  .player-card.readonly { opacity:0.85; }
+
+  .player-card-top { display:flex; align-items:flex-start; gap:12px; }
+  .player-avatar {
+    width:44px; height:44px; border-radius:10px; flex-shrink:0;
+    background:linear-gradient(135deg, rgba(232,255,71,0.15), rgba(71,200,255,0.08));
+    border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Bebas Neue',sans-serif; font-size:1rem; color:var(--accent); letter-spacing:1px;
+  }
+  .player-info { flex:1; min-width:0; }
+  .player-name { font-weight:600; font-size:0.95rem; color:var(--text); line-height:1.2; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .player-sub { font-size:0.78rem; color:var(--muted2); margin-top:3px; }
+
+  .player-tags { display:flex; gap:5px; flex-wrap:wrap; }
+  .tag { font-size:0.62rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; border-radius:4px; padding:2px 7px; border:1px solid; }
+  .tag-bat    { background:rgba(232,255,71,0.08); color:var(--accent);  border-color:rgba(232,255,71,0.2); }
+  .tag-bowl   { background:rgba(71,200,255,0.08); color:var(--accent2); border-color:rgba(71,200,255,0.2); }
+  .tag-all    { background:rgba(74,222,128,0.08); color:var(--green);   border-color:rgba(74,222,128,0.2); }
+  .tag-verified { background:rgba(74,222,128,0.1); color:var(--green);  border-color:rgba(74,222,128,0.25); }
+  .tag-unverified { background:rgba(107,114,128,0.1); color:var(--muted2); border-color:var(--border); }
+  .tag-neutral { background:var(--surface2); color:var(--muted2); border-color:var(--border); }
+
+  .player-details { display:grid; grid-template-columns:1fr 1fr; gap:6px; border-top:1px solid var(--border); padding-top:10px; }
+  .detail-item .detail-label { font-size:0.6rem; text-transform:uppercase; letter-spacing:0.8px; color:var(--muted); }
+  .detail-item .detail-value { font-size:0.8rem; color:var(--text); margin-top:1px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .detail-item.full { grid-column:span 2; }
+
+  .player-card-actions { display:flex; gap:6px; border-top:1px solid var(--border); padding-top:10px; }
+
+  /* TABLE VIEW */
+  .table-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .table-scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; }
+  thead th { background:var(--surface2); padding:10px 14px; text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:600; white-space:nowrap; cursor:pointer; user-select:none; }
+  thead th:hover { color:var(--text); }
+  thead th.sorted { color:var(--accent); }
+  tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+  tbody tr:last-child { border-bottom:none; }
+  tbody tr:hover { background:var(--surface2); }
+  tbody td { padding:10px 14px; font-size:0.85rem; white-space:nowrap; }
+  tbody td.mono { font-family:'DM Mono',monospace; }
+  .verified-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .verified-dot.yes { background:var(--green); box-shadow:0 0 5px rgba(74,222,128,0.5); }
+  .verified-dot.no  { background:var(--muted); }
+  .tbl-actions { display:flex; gap:6px; }
+
+  /* STATES */
+  .state-msg { text-align:center; padding:4rem 2rem; color:var(--muted2); }
+  .state-msg .icon { font-size:2.5rem; margin-bottom:1rem; }
+  .state-msg h3 { font-size:1rem; color:var(--text); margin-bottom:6px; }
+  .state-msg p { font-size:0.875rem; line-height:1.6; }
+  .spinner { width:28px; height:28px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; margin:0 auto 1rem; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* PAGINATION */
+  .pagination { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-top:1px solid var(--border); flex-wrap:wrap; gap:8px; }
+  .page-info { font-size:0.8rem; color:var(--muted2); }
+  .page-btns { display:flex; gap:4px; }
+  .page-btn { width:32px; height:32px; border-radius:6px; border:1px solid var(--border); background:transparent; color:var(--muted2); cursor:pointer; font-size:0.875rem; font-family:'DM Sans',sans-serif; transition:all 0.15s; display:flex; align-items:center; justify-content:center; }
+  .page-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .page-btn.active { background:var(--accent); color:#000; border-color:var(--accent); }
+  .page-btn:disabled { opacity:0.3; cursor:not-allowed; }
+
+  /* MODAL */
+  .modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.75); backdrop-filter:blur(4px); z-index:200; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.2s; padding:1rem; }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:2rem; width:560px; max-width:100%; max-height:90vh; overflow-y:auto; }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; }
+  .modal-header h2 { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:2px; }
+  .modal-close { background:var(--surface2); border:1px solid var(--border); color:var(--muted2); width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:1rem; display:flex; align-items:center; justify-content:center; transition:all 0.15s; }
+  .modal-close:hover { border-color:var(--red); color:var(--red); }
+
+  .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .form-group { display:flex; flex-direction:column; gap:6px; }
+  .form-group.full { grid-column:span 2; }
+  .form-group label { font-size:0.7rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted2); }
+  .form-group input, .form-group select {
+    background:var(--surface2); border:1px solid var(--border); color:var(--text);
+    padding:9px 12px; border-radius:8px; font-size:0.875rem;
+    font-family:'DM Sans',sans-serif; outline:none; transition:border-color 0.2s; width:100%;
+  }
+  .form-group input:focus, .form-group select:focus { border-color:var(--accent); }
+  .form-section-label {
+    font-size:0.65rem; text-transform:uppercase; letter-spacing:2px; color:var(--muted);
+    font-weight:700; margin:1.25rem 0 0.75rem; display:flex; align-items:center;
+    gap:8px; grid-column:span 2;
+  }
+  .form-section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+  .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:1.5rem; }
+  .alert { border-radius:8px; padding:10px 14px; font-size:0.85rem; margin-top:0.75rem; }
+  .alert-error   { background:rgba(255,82,82,0.08);  border:1px solid rgba(255,82,82,0.2);  color:#ffaaaa; }
+  .alert-success { background:rgba(74,222,128,0.08); border:1px solid rgba(74,222,128,0.2); color:#86efac; }
+
+  .confirm-modal { width:400px; }
+  .confirm-modal p { font-size:0.875rem; color:var(--muted2); line-height:1.6; margin-bottom:1.5rem; }
+  .confirm-modal strong { color:var(--text); }
+
+  /* READONLY notice inside modal */
+  .readonly-notice {
+    background:rgba(71,200,255,0.06); border:1px solid rgba(71,200,255,0.2);
+    border-radius:8px; padding:10px 14px; font-size:0.82rem; color:var(--accent2);
+    margin-bottom:1rem;
+  }
+
+  @media (max-width:640px) {
+    .container { padding:1rem; }
+    header { padding:0 1rem; }
+    .logo h1 { font-size:1.3rem; }
+    .players-grid { grid-template-columns:1fr; }
+    .form-grid { grid-template-columns:1fr; }
+    .form-group.full, .form-section-label { grid-column:span 1; }
+  }
+</style>
 </head>
 <body>
 
-  <!-- Nav is injected here automatically by auth.js -->
-  <div id="nav-container"></div>
+<header>
+  <a class="logo" href="dashboard.html">
+    <div class="logo-icon">🏏</div>
+    <div>
+      <h1>TCA CRICKET</h1>
+      <span>Association Portal</span>
+    </div>
+  </a>
+  <div class="header-right">
+    <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'">← Dashboard</button>
+    <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign Out</button>
+  </div>
+</header>
 
-  <main id="page-content" style="display:none">
-    <h1>Players</h1>
-    <!-- Your player list/editor goes here -->
-  </main>
+<div class="container">
 
-  <script type="module">
-    import './js/supabase.js';   // sets window.supabase
-    import './js/auth.js';       // sets window.requireAuth etc.
+  <div class="page-header">
+    <div>
+      <h2>Players</h2>
+      <p id="pageSubtitle">Loading…</p>
+    </div>
+    <div class="page-header-actions" id="pageHeaderActions" style="display:none">
+      <button class="btn btn-primary btn-sm" id="addPlayerBtn" onclick="openAddModal()" style="display:none">+ Add Player</button>
+    </div>
+  </div>
 
-    // requireAuth returns the profile if authorised, or redirects and returns null
-    const profile = await requireAuth(['board', 'national_coach', 'regional_coach']);
-    if (!profile) return;  // redirected — stop here
+  <!-- SCOPE BANNER -->
+  <div class="scope-banner" id="scopeBanner">
+    🔒 <span id="scopeText"></span>
+  </div>
 
-    // Now safe to show the page
-    document.getElementById('page-content').style.display = 'block';
+  <!-- SUMMARY -->
+  <div class="summary-row">
+    <div class="stat-card"><div class="label">Total</div><div class="value" id="statTotal">—</div><div class="sub">players</div></div>
+    <div class="stat-card"><div class="label">Verified</div><div class="value" id="statVerified">—</div><div class="sub">confirmed</div></div>
+    <div class="stat-card"><div class="label">Batters</div><div class="value" id="statBat">—</div><div class="sub">primary role</div></div>
+    <div class="stat-card"><div class="label">Bowlers</div><div class="value" id="statBowl">—</div><div class="sub">primary role</div></div>
+    <div class="stat-card"><div class="label">All-rounders</div><div class="value" id="statAll">—</div><div class="sub">primary role</div></div>
+    <div class="stat-card"><div class="label">Teams</div><div class="value" id="statTeams">—</div><div class="sub">distinct</div></div>
+  </div>
 
-    // Regional coaches only see their own region
-    let query = supabase.from('players').select('*');
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search name, team, style…" oninput="renderPlayers()">
+    </div>
+    <select id="filterRole" onchange="renderPlayers()">
+      <option value="">All Roles</option>
+      <option value="batter">Batter</option>
+      <option value="bowler">Bowler</option>
+      <option value="all-rounder">All-rounder</option>
+      <option value="wicket-keeper">Wicket-keeper</option>
+    </select>
+    <select id="filterRegion" onchange="renderPlayers()">
+      <option value="">All Regions</option>
+    </select>
+    <select id="filterVerified" onchange="renderPlayers()">
+      <option value="">All</option>
+      <option value="true">Verified</option>
+      <option value="false">Unverified</option>
+    </select>
+    <select id="filterTeam" onchange="renderPlayers()">
+      <option value="">All Teams</option>
+    </select>
+    <div class="view-toggle">
+      <button class="view-btn active" id="btnGrid" onclick="setView('grid')" title="Grid view">⊞</button>
+      <button class="view-btn" id="btnTable" onclick="setView('table')" title="Table view">☰</button>
+    </div>
+    <span class="count-badge"><span id="countShown">0</span> shown</span>
+  </div>
 
-    if (profile.role === 'national_coach') {
-      query = query.eq('squad', 'national');
-    } else if (profile.role === 'regional_coach') {
-      query = query.eq('region', profile.region);
+  <!-- PLAYERS CONTAINER -->
+  <div id="playersContainer">
+    <div class="state-msg"><div class="spinner"></div><p>Loading players…</p></div>
+  </div>
+
+</div>
+
+<!-- ADD / EDIT MODAL -->
+<div class="modal-overlay" id="playerModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Edit Player</h2>
+      <button class="modal-close" onclick="closePlayerModal()">✕</button>
+    </div>
+    <div id="readonlyNotice" class="readonly-notice" style="display:none">
+      👁 You can view this player's details but cannot edit them — they are outside your region.
+    </div>
+    <div class="form-grid">
+      <div class="form-section-label">Identity</div>
+      <div class="form-group full">
+        <label>Full Name *</label>
+        <input type="text" id="f_name" placeholder="e.g. Amir Hassan">
+      </div>
+      <div class="form-group">
+        <label>Player ID</label>
+        <input type="number" id="f_player_id" placeholder="auto">
+      </div>
+      <div class="form-group">
+        <label>Club ID</label>
+        <input type="number" id="f_club_id" placeholder="e.g. 12">
+      </div>
+      <div class="form-group">
+        <label>Age</label>
+        <input type="number" id="f_age" placeholder="e.g. 24" min="5" max="80">
+      </div>
+      <div class="form-group">
+        <label>Verified</label>
+        <select id="f_verified">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+
+      <div class="form-section-label">Team</div>
+      <div class="form-group full">
+        <label>Current Team</label>
+        <input type="text" id="f_current_team" placeholder="e.g. Dar es Salaam CC">
+      </div>
+      <div class="form-group">
+        <label>Current Team ID</label>
+        <input type="number" id="f_current_team_id" placeholder="e.g. 7">
+      </div>
+      <div class="form-group">
+        <label>Region</label>
+        <input type="text" id="f_region" placeholder="e.g. Dar es Salaam">
+      </div>
+
+      <div class="form-section-label">Playing Style</div>
+      <div class="form-group">
+        <label>Playing Role</label>
+        <select id="f_playing_role">
+          <option value="">— select —</option>
+          <option>Batter</option>
+          <option>Bowler</option>
+          <option>All-rounder</option>
+          <option>Wicket-keeper</option>
+          <option>Wicket-keeper Batter</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Batting Style</label>
+        <select id="f_batting_style">
+          <option value="">— select —</option>
+          <option>Right-hand bat</option>
+          <option>Left-hand bat</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label>Bowling Style</label>
+        <select id="f_bowling_style">
+          <option value="">— select —</option>
+          <option>Right-arm fast</option>
+          <option>Right-arm medium</option>
+          <option>Right-arm medium-fast</option>
+          <option>Right-arm off-break</option>
+          <option>Right-arm leg-break</option>
+          <option>Left-arm fast</option>
+          <option>Left-arm medium</option>
+          <option>Left-arm medium-fast</option>
+          <option>Left-arm orthodox</option>
+          <option>Left-arm wrist-spin</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="modalAlert" style="display:none" class="alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closePlayerModal()">Cancel</button>
+      <button class="btn btn-primary" id="savePlayerBtn" onclick="savePlayer()" style="display:none">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal confirm-modal">
+    <div class="modal-header">
+      <h2>Remove Player</h2>
+      <button class="modal-close" onclick="closeConfirmModal()">✕</button>
+    </div>
+    <p>Remove <strong id="confirmName">this player</strong> from the database? This cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeConfirmModal()">Cancel</button>
+      <button class="btn btn-danger" id="confirmDeleteBtn" onclick="confirmDelete()">Remove</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let allPlayers  = [];
+  let myProfile   = null;
+  let canEdit     = false;   // board or national_coach or regional_coach (own region)
+  let canAdd      = false;   // board only
+  let currentView = 'grid';
+  let currentPage = 1;
+  const PAGE_SIZE = 24;
+  let currentSort = { col: 'name', dir: 'asc' };
+  let editingId   = null;
+  let deletingId  = null;
+
+  // ── INIT ──────────────────────────────────────────────────
+  async function init() {
+    myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach']);
+    if (!myProfile) return;
+
+    const role = myProfile.role;
+    canEdit = ['board', 'national_coach', 'regional_coach'].includes(role);
+    canAdd  = role === 'board';
+
+    // Show scope banner for regional coaches
+    if (role === 'regional_coach') {
+      const banner = document.getElementById('scopeBanner');
+      banner.classList.add('visible');
+      document.getElementById('scopeText').textContent =
+        `You are viewing players in your region: ${myProfile.region || 'unassigned'}. You can only edit players assigned to your region.`;
     }
-    // board: no filter — sees everyone
 
-    const { data: players, error } = await query;
+    // Subtitle
+    const subtitles = {
+      board:           'All players — full access',
+      national_coach:  'All players — you can edit any player',
+      regional_coach:  `Players in your region (${myProfile.region || 'unassigned'})`,
+      selector:        'All players — read only',
+    };
+    document.getElementById('pageSubtitle').textContent = subtitles[role] || '';
 
-    if (error) {
-      console.error('Error loading players:', error.message);
+    // Add button
+    document.getElementById('pageHeaderActions').style.display = '';
+    if (canAdd) document.getElementById('addPlayerBtn').style.display = '';
+
+    await loadPlayers();
+  }
+
+  // ── LOAD ──────────────────────────────────────────────────
+  async function loadPlayers() {
+    try {
+      let query = window.supabase.from('tca_db_player_info').select('*').order('name', { ascending: true });
+
+      // Regional coaches only see their region
+      if (myProfile.role === 'regional_coach' && myProfile.region) {
+        query = query.eq('region', myProfile.region);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      allPlayers = data || [];
+      buildDynamicFilters();
+      updateSummary();
+      renderPlayers();
+    } catch(e) {
+      document.getElementById('playersContainer').innerHTML = `
+        <div class="state-msg">
+          <div class="icon">⚠️</div>
+          <h3>Could not load players</h3>
+          <p>${esc(e.message)}</p>
+        </div>`;
+    }
+  }
+
+  function buildDynamicFilters() {
+    const regions = [...new Set(allPlayers.map(p => p.region).filter(Boolean))].sort();
+    const teams   = [...new Set(allPlayers.map(p => p.current_team).filter(Boolean))].sort();
+
+    const rSel = document.getElementById('filterRegion');
+    regions.forEach(r => {
+      const o = document.createElement('option'); o.value = r; o.textContent = r; rSel.appendChild(o);
+    });
+    const tSel = document.getElementById('filterTeam');
+    teams.forEach(t => {
+      const o = document.createElement('option'); o.value = t; o.textContent = t; tSel.appendChild(o);
+    });
+  }
+
+  function updateSummary() {
+    const roleOf = p => (p.playing_role || '').toLowerCase();
+    document.getElementById('statTotal').textContent    = allPlayers.length;
+    document.getElementById('statVerified').textContent = allPlayers.filter(p => p.verified).length;
+    document.getElementById('statBat').textContent      = allPlayers.filter(p => roleOf(p).includes('batter') && !roleOf(p).includes('all')).length;
+    document.getElementById('statBowl').textContent     = allPlayers.filter(p => roleOf(p).includes('bowler') && !roleOf(p).includes('all')).length;
+    document.getElementById('statAll').textContent      = allPlayers.filter(p => roleOf(p).includes('all-rounder')).length;
+    document.getElementById('statTeams').textContent    = new Set(allPlayers.map(p => p.current_team).filter(Boolean)).size;
+  }
+
+  // ── FILTER & RENDER ───────────────────────────────────────
+  function getFiltered() {
+    const search  = document.getElementById('searchInput').value.toLowerCase();
+    const fRole   = document.getElementById('filterRole').value.toLowerCase();
+    const fRegion = document.getElementById('filterRegion').value;
+    const fVerif  = document.getElementById('filterVerified').value;
+    const fTeam   = document.getElementById('filterTeam').value;
+
+    return allPlayers.filter(p => {
+      const searchMatch = !search ||
+        (p.name || '').toLowerCase().includes(search) ||
+        (p.current_team || '').toLowerCase().includes(search) ||
+        (p.batting_style || '').toLowerCase().includes(search) ||
+        (p.bowling_style || '').toLowerCase().includes(search) ||
+        (p.playing_role  || '').toLowerCase().includes(search) ||
+        (p.region || '').toLowerCase().includes(search);
+
+      const roleMatch   = !fRole   || (p.playing_role || '').toLowerCase().includes(fRole);
+      const regionMatch = !fRegion || p.region === fRegion;
+      const verifMatch  = !fVerif  || String(p.verified) === fVerif;
+      const teamMatch   = !fTeam   || p.current_team === fTeam;
+
+      return searchMatch && roleMatch && regionMatch && verifMatch && teamMatch;
+    });
+  }
+
+  function renderPlayers() {
+    const filtered = getFiltered();
+    document.getElementById('countShown').textContent = filtered.length;
+    currentPage = 1;
+
+    if (filtered.length === 0) {
+      document.getElementById('playersContainer').innerHTML = `
+        <div class="state-msg">
+          <div class="icon">🔍</div>
+          <h3>No players found</h3>
+          <p>Try adjusting your search or filters.</p>
+        </div>`;
       return;
     }
 
-    // Render players...
-    console.log('Loaded players:', players);
-  </script>
+    if (currentView === 'grid') renderGrid(filtered);
+    else renderTable(filtered);
+  }
 
+  // ── GRID VIEW ─────────────────────────────────────────────
+  function renderGrid(filtered) {
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const slice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+    const cards = slice.map(p => playerCard(p)).join('');
+    const pag   = paginationHTML(total, totalPages);
+
+    document.getElementById('playersContainer').innerHTML =
+      `<div class="players-grid">${cards}</div>${pag}`;
+  }
+
+  function playerCard(p) {
+    const initials = (p.name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+    const canEditThis = playerEditable(p);
+    const roleTag = roleTagHTML(p.playing_role);
+    const teamsStr = Array.isArray(p.teams) ? p.teams.join(', ') : (p.teams || '');
+
+    const details = [];
+    if (p.current_team)  details.push({ label:'Team',    value:p.current_team });
+    if (p.region)        details.push({ label:'Region',  value:p.region });
+    if (p.age)           details.push({ label:'Age',     value:p.age });
+    if (p.batting_style) details.push({ label:'Batting', value:p.batting_style });
+    if (p.bowling_style) details.push({ label:'Bowling', value:p.bowling_style });
+    if (teamsStr)        details.push({ label:'Teams',   value:teamsStr, full:true });
+
+    return `
+      <div class="player-card${canEditThis ? '' : ' readonly'}">
+        <div class="player-card-top">
+          <div class="player-avatar">${initials}</div>
+          <div class="player-info">
+            <div class="player-name">${esc(p.name || 'Unknown')}</div>
+            <div class="player-sub">${esc(p.playing_role || '—')}</div>
+          </div>
+        </div>
+        <div class="player-tags">
+          ${roleTag}
+          <span class="tag ${p.verified ? 'tag-verified' : 'tag-unverified'}">${p.verified ? '✓ Verified' : 'Unverified'}</span>
+          ${p.region ? `<span class="tag tag-neutral">${esc(p.region)}</span>` : ''}
+        </div>
+        ${details.length ? `
+          <div class="player-details">
+            ${details.map(d => `
+              <div class="detail-item${d.full ? ' full' : ''}">
+                <div class="detail-label">${d.label}</div>
+                <div class="detail-value">${esc(String(d.value))}</div>
+              </div>`).join('')}
+          </div>` : ''}
+        <div class="player-card-actions">
+          <button class="btn btn-ghost btn-sm" style="flex:1"
+            onclick="openEditModal(${p.id})">
+            ${canEditThis ? '✏ Edit' : '👁 View'}
+          </button>
+          ${canAdd ? `<button class="btn btn-danger btn-sm" onclick="openConfirmDelete(${p.id}, '${esc(p.name || '')}')">🗑</button>` : ''}
+        </div>
+      </div>`;
+  }
+
+  // ── TABLE VIEW ────────────────────────────────────────────
+  function renderTable(filtered) {
+    const cols = [
+      { key:'name',         label:'Name' },
+      { key:'playing_role', label:'Role' },
+      { key:'current_team', label:'Team' },
+      { key:'region',       label:'Region' },
+      { key:'batting_style',label:'Batting' },
+      { key:'bowling_style',label:'Bowling' },
+      { key:'age',          label:'Age' },
+      { key:'verified',     label:'Verified' },
+    ];
+
+    // Sort
+    filtered = [...filtered].sort((a, b) => {
+      const va = a[currentSort.col], vb = b[currentSort.col];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; if (vb == null) return -1;
+      const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+      return currentSort.dir === 'asc' ? cmp : -cmp;
+    });
+
+    const total = filtered.length;
+    const totalPages = Math.ceil(total / PAGE_SIZE);
+    const slice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+    const thead = cols.map(c => {
+      const sorted = currentSort.col === c.key;
+      const arrow = sorted ? (currentSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
+      return `<th class="${sorted ? 'sorted' : ''}" onclick="sortTable('${c.key}')">${c.label}${arrow}</th>`;
+    }).join('') + '<th>Actions</th>';
+
+    const tbody = slice.map(p => {
+      const canEditThis = playerEditable(p);
+      return `<tr>
+        <td style="font-weight:600">${esc(p.name || '—')}</td>
+        <td>${esc(p.playing_role || '—')}</td>
+        <td>${esc(p.current_team || '—')}</td>
+        <td>${esc(p.region || '—')}</td>
+        <td class="mono" style="font-size:0.78rem">${esc(p.batting_style || '—')}</td>
+        <td class="mono" style="font-size:0.78rem">${esc(p.bowling_style || '—')}</td>
+        <td class="mono">${p.age || '—'}</td>
+        <td><span class="verified-dot ${p.verified ? 'yes' : 'no'}"></span></td>
+        <td>
+          <div class="tbl-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openEditModal(${p.id})">${canEditThis ? '✏' : '👁'}</button>
+            ${canAdd ? `<button class="btn btn-danger btn-sm" onclick="openConfirmDelete(${p.id}, '${esc(p.name || '')}')">🗑</button>` : ''}
+          </div>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const pag = paginationHTML(total, totalPages);
+
+    document.getElementById('playersContainer').innerHTML = `
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <thead><tr>${thead}</tr></thead>
+            <tbody>${tbody}</tbody>
+          </table>
+        </div>
+        ${pag}
+      </div>`;
+  }
+
+  function sortTable(col) {
+    if (currentSort.col === col) currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+    else { currentSort.col = col; currentSort.dir = 'asc'; }
+    renderPlayers();
+  }
+
+  // ── PAGINATION ────────────────────────────────────────────
+  function paginationHTML(total, totalPages) {
+    if (totalPages <= 1) return '';
+    const start = (currentPage - 1) * PAGE_SIZE + 1;
+    const end   = Math.min(currentPage * PAGE_SIZE, total);
+    const pages = [];
+    for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) pages.push(i);
+    return `
+      <div class="pagination">
+        <span class="page-info">Showing ${start}–${end} of ${total}</span>
+        <div class="page-btns">
+          <button class="page-btn" onclick="goPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹</button>
+          ${pages.map(p => `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goPage(${p})">${p}</button>`).join('')}
+          <button class="page-btn" onclick="goPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>›</button>
+        </div>
+      </div>`;
+  }
+
+  function goPage(p) { currentPage = p; renderPlayers(); }
+
+  // ── VIEW TOGGLE ───────────────────────────────────────────
+  function setView(v) {
+    currentView = v;
+    document.getElementById('btnGrid').classList.toggle('active', v === 'grid');
+    document.getElementById('btnTable').classList.toggle('active', v === 'table');
+    renderPlayers();
+  }
+
+  // ── EDIT PERMISSIONS ──────────────────────────────────────
+  function playerEditable(p) {
+    if (!canEdit) return false;
+    if (myProfile.role === 'board' || myProfile.role === 'national_coach') return true;
+    if (myProfile.role === 'regional_coach') {
+      return myProfile.region && p.region === myProfile.region;
+    }
+    return false;
+  }
+
+  // ── ADD MODAL ─────────────────────────────────────────────
+  function openAddModal() {
+    editingId = null;
+    document.getElementById('modalTitle').textContent = 'Add Player';
+    document.getElementById('savePlayerBtn').textContent = 'Add Player';
+    document.getElementById('savePlayerBtn').style.display = '';
+    document.getElementById('readonlyNotice').style.display = 'none';
+    clearForm();
+    // Pre-fill region for regional coaches
+    if (myProfile.role === 'regional_coach' && myProfile.region) {
+      document.getElementById('f_region').value = myProfile.region;
+      document.getElementById('f_region').readOnly = true;
+    }
+    showModalAlert('', '');
+    document.getElementById('playerModal').classList.add('open');
+    setTimeout(() => document.getElementById('f_name').focus(), 80);
+  }
+
+  // ── EDIT / VIEW MODAL ─────────────────────────────────────
+  function openEditModal(id) {
+    const p = allPlayers.find(x => x.id === id);
+    if (!p) return;
+    editingId = id;
+    const editable = playerEditable(p);
+
+    document.getElementById('modalTitle').textContent = editable ? 'Edit Player' : 'View Player';
+    document.getElementById('savePlayerBtn').style.display = editable ? '' : 'none';
+    document.getElementById('readonlyNotice').style.display = editable ? 'none' : '';
+
+    const fields = ['name','player_id','club_id','age','verified','current_team','current_team_id','region','playing_role','batting_style','bowling_style'];
+    fields.forEach(f => {
+      const el = document.getElementById('f_' + f);
+      if (!el) return;
+      el.value = p[f] != null ? p[f] : '';
+      el.disabled = !editable;
+    });
+
+    showModalAlert('', '');
+    document.getElementById('playerModal').classList.add('open');
+  }
+
+  function closePlayerModal() {
+    document.getElementById('playerModal').classList.remove('open');
+    editingId = null;
+    // Re-enable all fields
+    document.querySelectorAll('#playerModal input, #playerModal select').forEach(el => el.disabled = false);
+    document.getElementById('f_region').readOnly = false;
+  }
+
+  function clearForm() {
+    ['name','player_id','club_id','age','current_team','current_team_id','region',
+     'playing_role','batting_style','bowling_style'].forEach(f => {
+      const el = document.getElementById('f_' + f);
+      if (el) { el.value = ''; el.disabled = false; }
+    });
+    document.getElementById('f_verified').value = 'false';
+  }
+
+  // ── SAVE ──────────────────────────────────────────────────
+  async function savePlayer() {
+    const name = document.getElementById('f_name').value.trim();
+    if (!name) { showModalAlert('Player name is required.', 'error'); return; }
+
+    const btn = document.getElementById('savePlayerBtn');
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    const numOrNull = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : parseInt(v); };
+    const strOrNull = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : v; };
+
+    const payload = {
+      name,
+      player_id:        numOrNull('f_player_id'),
+      club_id:          numOrNull('f_club_id'),
+      age:              numOrNull('f_age'),
+      verified:         document.getElementById('f_verified').value === 'true',
+      current_team:     strOrNull('f_current_team'),
+      current_team_id:  numOrNull('f_current_team_id'),
+      region:           strOrNull('f_region'),
+      playing_role:     strOrNull('f_playing_role'),
+      batting_style:    strOrNull('f_batting_style'),
+      bowling_style:    strOrNull('f_bowling_style'),
+    };
+
+    try {
+      let error;
+      if (editingId) {
+        ({ error } = await window.supabase
+          .from('tca_db_player_info')
+          .update(payload)
+          .eq('id', editingId));
+      } else {
+        ({ error } = await window.supabase
+          .from('tca_db_player_info')
+          .insert(payload));
+      }
+      if (error) throw error;
+      closePlayerModal();
+      await loadPlayers();
+    } catch(e) {
+      showModalAlert(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = editingId ? 'Save Changes' : 'Add Player';
+    }
+  }
+
+  function showModalAlert(msg, type) {
+    const el = document.getElementById('modalAlert');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.textContent = msg;
+    el.className = `alert alert-${type}`;
+    el.style.display = 'block';
+  }
+
+  // ── DELETE ────────────────────────────────────────────────
+  function openConfirmDelete(id, name) {
+    deletingId = id;
+    document.getElementById('confirmName').textContent = name;
+    document.getElementById('confirmModal').classList.add('open');
+  }
+
+  function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('open');
+    deletingId = null;
+  }
+
+  async function confirmDelete() {
+    if (!deletingId) return;
+    const btn = document.getElementById('confirmDeleteBtn');
+    btn.disabled = true; btn.textContent = 'Removing…';
+    try {
+      const { error } = await window.supabase
+        .from('tca_db_player_info').delete().eq('id', deletingId);
+      if (error) throw error;
+      closeConfirmModal();
+      await loadPlayers();
+    } catch(e) {
+      alert('Error: ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = 'Remove';
+    }
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────
+  function roleTagHTML(role) {
+    const r = (role || '').toLowerCase();
+    if (r.includes('all-rounder')) return `<span class="tag tag-all">All-rounder</span>`;
+    if (r.includes('batter'))      return `<span class="tag tag-bat">Batter</span>`;
+    if (r.includes('bowler'))      return `<span class="tag tag-bowl">Bowler</span>`;
+    if (r.includes('keeper'))      return `<span class="tag tag-bat">WK</span>`;
+    return role ? `<span class="tag tag-neutral">${esc(role)}</span>` : '';
+  }
+
+  function esc(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function doSignOut() {
+    await window.supabase.auth.signOut();
+    window.location.href = 'index.html';
+  }
+
+  document.getElementById('playerModal').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayerModal(); });
+  document.getElementById('confirmModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConfirmModal(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { closePlayerModal(); closeConfirmModal(); }
+  });
+
+  init();
+</script>
 </body>
 </html>
