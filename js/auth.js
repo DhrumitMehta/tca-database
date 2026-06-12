@@ -5,7 +5,7 @@ const PAGE_ROLES = {
   'dashboard.html':  ['board', 'selector', 'national_coach', 'regional_coach', 'umpire', 'ngb_paid_staff'],
   'admin.html':      ['board'],
   'selectors.html':  ['board', 'selector'],
-  'players.html':    ['board', 'national_coach', 'regional_coach'],
+  'players.html':    ['board', 'national_coach', 'regional_coach', 'ngb_paid_staff'],
   'matches.html':    ['board'],
   'umpires.html':    ['umpire'],
 };
@@ -96,7 +96,7 @@ function injectNav(profile) {
   const links = [
     { href: 'dashboard.html', label: 'Dashboard', roles: ['board', 'selector', 'national_coach', 'regional_coach', 'umpire', 'ngb_paid_staff'] },
     { href: 'selectors.html', label: 'Selection',  roles: ['board', 'selector'] },
-    { href: 'players.html',   label: 'Players',    roles: ['board', 'national_coach', 'regional_coach'] },
+    { href: 'players.html',   label: 'Players',    roles: ['board', 'national_coach', 'regional_coach', 'ngb_paid_staff'] },
     { href: 'matches.html',   label: 'Matches',    roles: ['board'] },
     { href: 'admin.html',     label: 'Admin',      roles: ['board'] },
     { href: 'umpires.html',   label: 'My Profile', roles: ['umpire'] },

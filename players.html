@@ -562,7 +562,7 @@
 
   // ── INIT ──────────────────────────────────────────────────
   async function init() {
-    myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach']);
+    myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach', 'ngb_paid_staff']);
     if (!myProfile) return;
 
     const role = myProfile.role;
@@ -583,6 +583,7 @@
       national_coach:  'All players — you can edit any player',
       regional_coach:  `Players in your region (${myProfile.region || 'unassigned'})`,
       selector:        'All players — read only',
+      ngb_paid_staff:   'All players — read only'
     };
     document.getElementById('pageSubtitle').textContent = subtitles[role] || '';
 
