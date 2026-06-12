@@ -324,12 +324,13 @@
     national_coach:  'National Coach',
     regional_coach:  'Regional Coach',
     umpire:          'Umpire',
+    ngb_paid_staff:  'NGB Paid Staff',
   };
 
   let currentProfile = null;
 
   async function init() {
-    const profile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach', 'umpire']);
+    const profile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach', 'umpire', 'ngb_paid_staff']);
     if (!profile) return;
     currentProfile = profile;
     renderDashboard(profile);
