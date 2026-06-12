@@ -202,6 +202,54 @@
     margin-bottom:1rem;
   }
 
+  /* SELECTION MODE */
+  .select-mode-bar {
+    display:none; align-items:center; gap:10px;
+    background:rgba(232,255,71,0.06); border:1px solid rgba(232,255,71,0.2);
+    border-radius:10px; padding:10px 16px; margin-bottom:1.25rem; flex-wrap:wrap;
+  }
+  .select-mode-bar.visible { display:flex; }
+  .select-info { font-size:0.85rem; color:var(--accent); font-weight:600; flex:1; }
+  .select-info span { color:var(--text); }
+
+  .player-card.selectable { cursor:pointer; }
+  .player-card.selectable:hover { border-color:rgba(232,255,71,0.4); }
+  .player-card.sel-selected { border-color:var(--accent) !important; background:rgba(232,255,71,0.04); }
+  .player-card.sel-selected .player-avatar { background:rgba(232,255,71,0.25); }
+
+  .sel-checkbox {
+    width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
+    background:var(--surface2); flex-shrink:0; display:flex; align-items:center;
+    justify-content:center; font-size:11px; transition:all 0.15s;
+  }
+  .player-card.sel-selected .sel-checkbox { background:var(--accent); border-color:var(--accent); color:#000; }
+
+  /* BULK EDIT MODAL */
+  .bulk-modal { width:500px; }
+  .bulk-field-row {
+    display:grid; grid-template-columns:auto 1fr; gap:10px; align-items:center;
+    padding:10px 0; border-bottom:1px solid var(--border);
+  }
+  .bulk-field-row:last-child { border-bottom:none; }
+  .bulk-toggle {
+    width:36px; height:20px; border-radius:10px; background:var(--surface2);
+    border:1px solid var(--border); cursor:pointer; position:relative;
+    transition:background 0.2s; flex-shrink:0;
+  }
+  .bulk-toggle.on { background:var(--accent); border-color:var(--accent); }
+  .bulk-toggle::after {
+    content:''; position:absolute; top:2px; left:2px;
+    width:14px; height:14px; border-radius:50%; background:#fff;
+    transition:transform 0.2s;
+  }
+  .bulk-toggle.on::after { transform:translateX(16px); background:#000; }
+  .bulk-field-content { display:flex; flex-direction:column; gap:6px; }
+  .bulk-field-label { font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted2); }
+  .bulk-field-content select { opacity:0.4; pointer-events:none; transition:opacity 0.2s; }
+  .bulk-field-content select.enabled { opacity:1; pointer-events:all; }
+  .bulk-summary { font-size:0.82rem; color:var(--muted2); margin-bottom:1.25rem; line-height:1.5; }
+  .bulk-summary strong { color:var(--text); }
+
   @media (max-width:640px) {
     .container { padding:1rem; }
     header { padding:0 1rem; }
@@ -236,6 +284,7 @@
       <p id="pageSubtitle">Loading…</p>
     </div>
     <div class="page-header-actions" id="pageHeaderActions" style="display:none">
+      <button class="btn btn-ghost btn-sm" id="bulkEditBtn" onclick="toggleSelectMode()" style="display:none">☑ Select</button>
       <button class="btn btn-primary btn-sm" id="addPlayerBtn" onclick="openAddModal()" style="display:none">+ Add Player</button>
     </div>
   </div>
@@ -284,6 +333,15 @@
       <button class="view-btn" id="btnTable" onclick="setView('table')" title="Table view">☰</button>
     </div>
     <span class="count-badge"><span id="countShown">0</span> shown</span>
+  </div>
+
+  <!-- SELECTION BAR -->
+  <div class="select-mode-bar" id="selectModeBar">
+    <span class="select-info"><span id="selectedCount">0</span> players selected</span>
+    <button class="btn btn-ghost btn-sm" onclick="selectAllVisible()">Select all visible</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearSelection()">Clear</button>
+    <button class="btn btn-primary btn-sm" id="applyBulkBtn" onclick="openBulkModal()" disabled>✏ Edit Selected</button>
+    <button class="btn btn-ghost btn-sm" onclick="toggleSelectMode()">✕ Cancel</button>
   </div>
 
   <!-- PLAYERS CONTAINER -->
@@ -394,6 +452,77 @@
   </div>
 </div>
 
+<!-- BULK EDIT MODAL -->
+<div class="modal-overlay" id="bulkModal">
+  <div class="modal bulk-modal">
+    <div class="modal-header">
+      <h2>Bulk Edit Players</h2>
+      <button class="modal-close" onclick="closeBulkModal()">✕</button>
+    </div>
+    <p class="bulk-summary">
+      Editing <strong id="bulkCount">0</strong> selected players.
+      Toggle a field on to apply it — fields left off will not be changed.
+    </p>
+
+    <!-- Region -->
+    <div class="bulk-field-row">
+      <div class="bulk-toggle" id="toggleRegion" onclick="toggleBulkField('region')"></div>
+      <div class="bulk-field-content">
+        <div class="bulk-field-label">Region</div>
+        <select id="bulk_region">
+          <option value="">— select —</option>
+          <option>MOROGORO</option><option>GAIRO</option><option>GEITA</option>
+          <option>ARUSHA</option><option>DODOMA</option><option>KONGWA</option>
+          <option>AZANIA</option><option>BAGAMOYO</option><option>KITUNDA</option>
+          <option>KIGAMBONI</option><option>TANGA</option><option>KILINDI</option>
+          <option>KISARAWE</option><option>KILIMANJARO</option><option>KAWE</option>
+          <option>CHANIKA</option><option>CHAMWINO</option><option>MWANZA</option>
+          <option>ZANZIBAR</option><option>IRINGA</option><option>PANDAMBILI</option>
+          <option>KOROGWE</option><option>DAR ES SALAAM</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Batting Style -->
+    <div class="bulk-field-row">
+      <div class="bulk-toggle" id="toggleBatting" onclick="toggleBulkField('batting')"></div>
+      <div class="bulk-field-content">
+        <div class="bulk-field-label">Batting Style</div>
+        <select id="bulk_batting_style">
+          <option value="">— select —</option>
+          <option>Right Handed Batter</option>
+          <option>Left Handed Batter</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Bowling Style -->
+    <div class="bulk-field-row">
+      <div class="bulk-toggle" id="toggleBowling" onclick="toggleBulkField('bowling')"></div>
+      <div class="bulk-field-content">
+        <div class="bulk-field-label">Bowling Style</div>
+        <select id="bulk_bowling_style">
+          <option value="">— select —</option>
+          <option>Right Arm Fast</option>
+          <option>Right Arm Medium</option>
+          <option>Right Arm Off Spin</option>
+          <option>Right Arm Leg Spin</option>
+          <option>Left Arm Fast</option>
+          <option>Left Arm Medium</option>
+          <option>Left Arm Off Spin</option>
+          <option>Left Arm Leg Spin</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="bulkAlert" style="display:none" class="alert"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeBulkModal()">Cancel</button>
+      <button class="btn btn-primary" id="saveBulkBtn" onclick="saveBulk()">Apply Changes</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM DELETE -->
 <div class="modal-overlay" id="confirmModal">
   <div class="modal confirm-modal">
@@ -420,6 +549,8 @@
   let currentSort = { col: 'name', dir: 'asc' };
   let editingId   = null;
   let deletingId  = null;
+  let selectMode  = false;
+  let selectedIds = new Set();
 
   // ── INIT ──────────────────────────────────────────────────
   async function init() {
@@ -449,7 +580,8 @@
 
     // Add button
     document.getElementById('pageHeaderActions').style.display = '';
-    if (canAdd) document.getElementById('addPlayerBtn').style.display = '';
+    if (canEdit) document.getElementById('bulkEditBtn').style.display = '';
+    if (canAdd)  document.getElementById('addPlayerBtn').style.display = '';
 
     await loadPlayers();
   }
