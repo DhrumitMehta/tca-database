@@ -6,6 +6,9 @@
 <title>TCA Cricket Stats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root {
@@ -1073,7 +1076,8 @@
       <span id="connLabel">Not connected</span>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="openHistoryPanel()" title="Export History">📋 History <span id="historyBadge" style="display:none;background:var(--accent);color:#000;border-radius:3px;padding:1px 5px;font-size:0.65rem;font-weight:700;margin-left:2px"></span></button>
-    <button class="btn btn-ghost" onclick="openConfig()">⚙ Config</button>
+    <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'">← Dashboard</button>
+    <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign Out</button>
   </div>
 </header>
 
@@ -1300,27 +1304,6 @@
 
 <!-- ═══════════════ MODALS ═══════════════ -->
 
-<!-- CONFIG MODAL -->
-<div class="modal-overlay" id="configModal">
-  <div class="modal">
-    <h2>Database Config</h2>
-    <p>Enter your Supabase project URL and anonymous key. These are stored in your browser's local storage only.</p>
-    <div class="form-group">
-      <label>Supabase URL</label>
-      <input type="text" id="cfgUrl" placeholder="https://xxxx.supabase.co">
-    </div>
-    <div class="form-group">
-      <label>Supabase Anon Key</label>
-      <input type="text" id="cfgKey" placeholder="eyJhbGci...">
-    </div>
-    <div id="cfgError" style="color:var(--red);font-size:0.8rem;margin-top:0.5rem;display:none;"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeConfig()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveConfig()">Save & Connect</button>
-    </div>
-  </div>
-</div>
-
 <!-- PDF TITLE MODAL -->
 <div class="modal-overlay" id="pdfTitleModal">
   <div class="modal">
@@ -1465,12 +1448,12 @@
   <span class="toast-close" onclick="hideToast()">✕</span>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 // ─── STATE ───────────────────────────────────────────────
-const SUPABASE_URL = window.supabase.supabaseUrl;
-const SUPABASE_KEY = window.supabase.supabaseKey;
+let SUPABASE_URL = '';
+let SUPABASE_KEY = '';
+let myProfile = null;
 let currentTab = 'batting';
 let allData = {};
 let currentSort = { col: null, dir: 'desc' };
@@ -1500,13 +1483,33 @@ let exportHistory = [];
 let _importMatchedIds = [];
 
 // ─── INIT ─────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  loadExportHistoryFromStorage();
+async function init() {
+  myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach']);
+  if (!myProfile) return;
 
-  if (SUPABASE_URL && SUPABASE_KEY &&
-      !SUPABASE_URL.includes('%%') && !SUPABASE_KEY.includes('%%')) {
-    loadReferenceData().then(() => loadData(true));
+  SUPABASE_URL = window.supabase.supabaseUrl;
+  SUPABASE_KEY = window.supabase.supabaseKey;
+
+  loadExportHistoryFromStorage();
+  setConnStatus('loading');
+
+  try {
+    await loadReferenceData();
+    await loadData(true);
+  } catch(e) {
+    setConnStatus('error');
+    showError(e.message);
   }
+}
+
+async function doSignOut() {
+  await window.supabase.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+
   document.addEventListener('click', e => {
     if (!e.target.closest('.multi-select-wrapper')) closeAllMultiSelects();
   });
@@ -1868,8 +1871,7 @@ function filterAndRender() {
 
 // ─── LOAD DATA ────────────────────────────────────────────
 async function loadData(forceFetch = false) {
-  if (!SUPABASE_URL || !SUPABASE_KEY ||
-      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
 
   updateActiveChips();
   selectedPlayerIds.clear();
@@ -2588,8 +2590,7 @@ function saveExportHistoryToStorage() {
 }
 
 async function saveHistoryToSupabase(record) {
-  if (!SUPABASE_URL || !SUPABASE_KEY ||
-      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
   try {
     const payload = {
       export_id:         record.id,
@@ -2618,8 +2619,7 @@ async function saveHistoryToSupabase(record) {
 }
 
 async function syncHistoryFromSupabase() {
-  if (!SUPABASE_URL || !SUPABASE_KEY ||
-      SUPABASE_URL.includes('%%') || SUPABASE_KEY.includes('%%')) return;
+  if (!SUPABASE_URL || !SUPABASE_KEY) return;
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/${SUPABASE_HISTORY_TABLE}?select=*&order=exported_at.desc&limit=50`,
