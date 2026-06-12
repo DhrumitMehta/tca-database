@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TCA Admin – User Management</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.js"></script>
+<script src="js/auth.js"></script>
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111318;
+    --surface2: #1a1d24;
+    --border: #252830;
+    --accent: #e8ff47;
+    --accent2: #47c8ff;
+    --red: #ff5252;
+    --green: #4ade80;
+    --text: #f0f2f5;
+    --muted: #6b7280;
+    --muted2: #9ca3af;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon { width: 36px; height: 36px; background: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo h1 { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; letter-spacing: 2px; color: var(--text); }
+  .logo span { font-family: 'DM Sans', sans-serif; font-size: 0.75rem; color: var(--muted); font-weight: 300; letter-spacing: 1px; text-transform: uppercase; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 2rem; }
+
+  .page-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem; letter-spacing: 2px; margin-bottom: 0.25rem; }
+  .page-subtitle { font-size: 0.875rem; color: var(--muted2); margin-bottom: 1.5rem; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .card h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 1.5px;
+    margin-bottom: 1rem;
+  }
+
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  .form-group label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  select, input[type="text"], input[type="email"] {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+
+  select:focus, input:focus { border-color: var(--accent); }
+
+  .btn {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #d4eb3a; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-ghost { background: transparent; color: var(--muted2); border: 1px solid var(--border); }
+  .btn-ghost:hover { border-color: var(--muted2); color: var(--text); }
+  .btn-danger { background: rgba(255,82,82,0.1); color: var(--red); border: 1px solid rgba(255,82,82,0.2); }
+  .btn-danger:hover { background: rgba(255,82,82,0.2); }
+  .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+
+  .form-actions {
+    margin-top: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .form-error {
+    color: var(--red);
+    font-size: 0.85rem;
+    background: rgba(255,82,82,0.08);
+    border: 1px solid rgba(255,82,82,0.2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-top: 1rem;
+    display: none;
+  }
+  .form-error.visible { display: block; }
+
+  .result-card {
+    background: rgba(232,255,71,0.06);
+    border: 1px solid rgba(232,255,71,0.25);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+  .result-card.visible { display: block; }
+
+  .result-card h3 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 1.5px;
+    color: var(--accent);
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-row:last-child { border-bottom: none; }
+
+  .result-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 600;
+    flex-shrink: 0;
+    width: 110px;
+  }
+
+  .result-value {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.95rem;
+    color: var(--text);
+    word-break: break-all;
+    flex: 1;
+  }
+
+  .result-value.password {
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 1px;
+  }
+
+  .copy-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted2);
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .result-note {
+    font-size: 0.75rem;
+    color: var(--muted2);
+    margin-top: 12px;
+    line-height: 1.5;
+  }
+
+  .user-table-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    background: var(--surface2);
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 10px 14px; font-size: 0.875rem; }
+  tbody td.name { font-weight: 500; }
+
+  .role-badge {
+    display: inline-block;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--accent2);
+  }
+  .role-badge.board { color: var(--accent); border-color: rgba(232,255,71,0.3); background: rgba(232,255,71,0.08); }
+
+  .pending-badge {
+    display: inline-block;
+    background: rgba(255,82,82,0.08);
+    border: 1px solid rgba(255,82,82,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--red);
+  }
+
+  .state-msg { text-align: center; padding: 3rem 2rem; color: var(--muted2); }
+  .state-msg .icon { font-size: 2rem; margin-bottom: 0.75rem; }
+
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 0.75rem; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 640px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .container { padding: 1rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏏</div>
+    <div>
+      <h1>TCA CRICKET STATS</h1>
+      <span>Admin · User Management</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-ghost btn-sm" onclick="window.location.href='dashboard.html'">← Dashboard</button>
+    <button class="btn btn-danger btn-sm" onclick="doSignOut()">Sign Out</button>
+  </div>
+</header>
+
+<div class="container">
+  <div class="page-title">User Management</div>
+  <div class="page-subtitle">Create new accounts and assign roles. Board access only.</div>
+
+  <div class="result-card" id="resultCard">
+    <h3>✅ User Created</h3>
+    <div class="result-row">
+      <span class="result-label">Name</span>
+      <span class="result-value" id="resultName"></span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Email</span>
+      <span class="result-value" id="resultEmail"></span>
+      <button class="copy-btn" onclick="copyText('resultEmail')" title="Copy">📋</button>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Role</span>
+      <span class="result-value" id="resultRole"></span>
+    </div>
+    <div class="result-row">
+      <span class="result-label">Temp Password</span>
+      <span class="result-value password" id="resultPassword"></span>
+      <button class="copy-btn" onclick="copyText('resultPassword')" title="Copy">📋</button>
+    </div>
+    <div class="result-note">
+      ⚠️ This temporary password is shown only once. Share it securely with the user — they will be required to set a new password on first login.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Create New User</h2>
+    <div class="form-grid">
+      <div class="form-group full">
+        <label>Full Name</label>
+        <input type="text" id="newFullName" placeholder="e.g. Jane Doe">
+      </div>
+      <div class="form-group full">
+        <label>Email</label>
+        <input type="email" id="newEmail" placeholder="e.g. jane.doe@example.com">
+      </div>
+      <div class="form-group">
+        <label>Role</label>
+        <select id="newRole">
+          <option value="">Select role…</option>
+          <option value="board">Board</option>
+          <option value="selector">Selector</option>
+          <option value="national_coach">National Coach</option>
+          <option value="regional_coach">Regional Coach</option>
+          <option value="umpire">Umpire</option>
+          <option value="ngb_paid_staff">NGB Paid Staff</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Region <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="newRegion" placeholder="e.g. North">
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" id="createUserBtn" onclick="createUser()">+ Create User</button>
+      <span id="createSpinnerWrap" style="display:none">
+        <div class="spinner" style="width:20px;height:20px;margin:0;display:inline-block;vertical-align:middle"></div>
+      </span>
+    </div>
+
+    <div class="form-error" id="formError"></div>
+  </div>
+
+  <div class="card" style="padding:0">
+    <div style="padding:1.5rem 1.5rem 1rem">
+      <h2 style="margin-bottom:0">Existing Users</h2>
+    </div>
+    <div class="user-table-wrapper" style="border:none;border-radius:0">
+      <div id="usersContainer">
+        <div class="state-msg">
+          <div class="spinner"></div>
+          <p>Loading users…</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let myProfile = null;
+
+const ROLE_LABELS = {
+  board: 'Board',
+  selector: 'Selector',
+  national_coach: 'National Coach',
+  regional_coach: 'Regional Coach',
+  umpire: 'Umpire',
+  ngb_paid_staff: 'NGB Paid Staff',
+};
+
+async function init() {
+  myProfile = await requireAuth(['board']);
+  if (!myProfile) return;
+  await loadUsers();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+async function doSignOut() {
+  await window.supabase.auth.signOut();
+  window.location.href = 'index.html';
+}
+
+async function loadUsers() {
+  const container = document.getElementById('usersContainer');
+  try {
+    const { data, error } = await window.supabase
+      .from('profiles')
+      .select('id, full_name, role, region, must_change_password')
+      .order('full_name', { ascending: true });
+
+    if (error) throw error;
+
+    if (!data || data.length === 0) {
+      container.innerHTML = '<div class="state-msg"><div class="icon">User</div><p>No users found.</p></div>';
+      return;
+    }
+
+    container.innerHTML =
+      '<table><thead><tr><th>Name</th><th>Role</th><th>Region</th><th>Status</th></tr></thead><tbody>' +
+      data.map(function(u) {
+        var roleClass = u.role === 'board' ? 'role-badge board' : 'role-badge';
+        var statusHtml = u.must_change_password
+          ? '<span class="pending-badge">Pending Setup</span>'
+          : '<span style="color:var(--green);font-size:0.8rem">Active</span>';
+        return '<tr>' +
+          '<td class="name">' + escapeHtml(u.full_name || '-') + '</td>' +
+          '<td><span class="' + roleClass + '">' + (ROLE_LABELS[u.role] || u.role) + '</span></td>' +
+          '<td>' + escapeHtml(u.region || '-') + '</td>' +
+          '<td>' + statusHtml + '</td>' +
+        '</tr>';
+      }).join('') +
+      '</tbody></table>';
+  } catch (e) {
+    container.innerHTML = '<div class="state-msg"><div class="icon">!</div><p>Error loading users: ' + escapeHtml(e.message) + '</p></div>';
+  }
+}
+
+function escapeHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function createUser() {
+  const fullName = document.getElementById('newFullName').value.trim();
+  const email    = document.getElementById('newEmail').value.trim();
+  const role     = document.getElementById('newRole').value;
+  const region   = document.getElementById('newRegion').value.trim();
+
+  const errorEl = document.getElementById('formError');
+  const btn     = document.getElementById('createUserBtn');
+  const spinner = document.getElementById('createSpinnerWrap');
+
+  errorEl.classList.remove('visible');
+  document.getElementById('resultCard').classList.remove('visible');
+
+  if (!fullName || !email || !role) {
+    errorEl.textContent = 'Full name, email, and role are required.';
+    errorEl.classList.add('visible');
+    return;
+  }
+
+  btn.disabled = true;
+  spinner.style.display = 'inline-block';
+
+  try {
+    const sessionRes = await window.supabase.auth.getSession();
+    const accessToken = sessionRes.data && sessionRes.data.session ? sessionRes.data.session.access_token : null;
+    if (!accessToken) throw new Error('No active session. Please sign in again.');
+
+    const res = await fetch(window.supabase.supabaseUrl + '/functions/v1/create-user', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+        'apikey': window.supabase.supabaseKey,
+      },
+      body: JSON.stringify({ full_name: fullName, email: email, role: role, region: region || null }),
+    });
+
+    const result = await res.json();
+    if (!res.ok || result.error) throw new Error(result.error || 'Failed to create user.');
+
+    document.getElementById('resultName').textContent     = fullName;
+    document.getElementById('resultEmail').textContent    = result.email;
+    document.getElementById('resultRole').textContent     = ROLE_LABELS[role] || role;
+    document.getElementById('resultPassword').textContent = result.temp_password;
+    document.getElementById('resultCard').classList.add('visible');
+    document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    document.getElementById('newFullName').value = '';
+    document.getElementById('newEmail').value = '';
+    document.getElementById('newRole').value = '';
+    document.getElementById('newRegion').value = '';
+
+    await loadUsers();
+  } catch (e) {
+    errorEl.textContent = e.message;
+    errorEl.classList.add('visible');
+  } finally {
+    btn.disabled = false;
+    spinner.style.display = 'none';
+  }
+}
+
+function copyText(elId) {
+  const text = document.getElementById(elId).textContent;
+  navigator.clipboard.writeText(text).then(function() {
+    const btn = document.getElementById(elId).nextElementSibling;
+    const original = btn.textContent;
+    btn.textContent = 'Done';
+    setTimeout(function() { btn.textContent = original; }, 1200);
+  });
+}
+</script>
+</body>
+</html>
