@@ -2,7 +2,7 @@
 // Usage: call requireAuth(['board','selector']) at the top of any protected page
 
 const PAGE_ROLES = {
-  'dashboard.html':  ['board', 'selector', 'national_coach', 'regional_coach', 'umpire'],
+  'dashboard.html':  ['board', 'selector', 'national_coach', 'regional_coach', 'umpire', 'ngb_paid_staff'],
   'admin.html':      ['board'],
   'selectors.html':  ['board', 'selector'],
   'players.html':    ['board', 'national_coach', 'regional_coach'],
@@ -94,7 +94,7 @@ function injectNav(profile) {
   if (!container) return;
 
   const links = [
-    { href: 'dashboard.html', label: 'Dashboard', roles: ['board', 'selector', 'national_coach', 'regional_coach', 'umpire'] },
+    { href: 'dashboard.html', label: 'Dashboard', roles: ['board', 'selector', 'national_coach', 'regional_coach', 'umpire', 'ngb_paid_staff'] },
     { href: 'selectors.html', label: 'Selection',  roles: ['board', 'selector'] },
     { href: 'players.html',   label: 'Players',    roles: ['board', 'national_coach', 'regional_coach'] },
     { href: 'matches.html',   label: 'Matches',    roles: ['board'] },
@@ -128,6 +128,7 @@ function formatRole(role) {
     national_coach:  'National coach',
     regional_coach:  'Regional coach',
     umpire:          'Umpire',
+    ngb_paid_staff:  'NGB Paid Staff',
   };
   return labels[role] || role;
 }
