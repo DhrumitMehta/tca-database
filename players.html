@@ -52,8 +52,10 @@
   .btn { padding:9px 16px; border-radius:8px; font-size:0.875rem; font-weight:500; cursor:pointer; border:none; font-family:'DM Sans',sans-serif; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
   .btn-primary { background:var(--accent); color:#000; font-weight:600; }
   .btn-primary:hover { background:#d4eb3a; }
+  .btn-primary:disabled { opacity:0.4; cursor:not-allowed; }
   .btn-ghost { background:transparent; color:var(--muted2); border:1px solid var(--border); }
   .btn-ghost:hover { border-color:var(--muted2); color:var(--text); }
+  .btn-ghost.active { border-color:var(--accent); color:var(--accent); }
   .btn-danger { background:rgba(255,82,82,0.08); color:var(--red); border:1px solid rgba(255,82,82,0.15); }
   .btn-danger:hover { background:rgba(255,82,82,0.15); }
   .btn-sm { padding:6px 12px; font-size:0.8rem; }
@@ -134,9 +136,12 @@
   thead th { background:var(--surface2); padding:10px 14px; text-align:left; font-size:0.68rem; text-transform:uppercase; letter-spacing:1px; color:var(--muted); font-weight:600; white-space:nowrap; cursor:pointer; user-select:none; }
   thead th:hover { color:var(--text); }
   thead th.sorted { color:var(--accent); }
+  thead th.checkbox-col, tbody td.checkbox-col { cursor:default; width:36px; }
   tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
   tbody tr:last-child { border-bottom:none; }
   tbody tr:hover { background:var(--surface2); }
+  tbody tr.selectable-row { cursor:pointer; }
+  tbody tr.sel-selected { background:rgba(232,255,71,0.04); }
   tbody td { padding:10px 14px; font-size:0.85rem; white-space:nowrap; }
   tbody td.mono { font-family:'DM Mono',monospace; }
   .verified-dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
@@ -220,9 +225,11 @@
   .sel-checkbox {
     width:18px; height:18px; border-radius:4px; border:2px solid var(--border);
     background:var(--surface2); flex-shrink:0; display:flex; align-items:center;
-    justify-content:center; font-size:11px; transition:all 0.15s;
+    justify-content:center; font-size:11px; transition:all 0.15s; margin-top:2px;
+    color:#000; font-weight:700;
   }
   .player-card.sel-selected .sel-checkbox { background:var(--accent); border-color:var(--accent); color:#000; }
+  .player-card.readonly .sel-checkbox { opacity:0.25; }
 
   /* BULK EDIT MODAL */
   .bulk-modal { width:500px; }
@@ -551,6 +558,7 @@
   let deletingId  = null;
   let selectMode  = false;
   let selectedIds = new Set();
+  let bulkFieldsEnabled = { region: false, batting: false, bowling: false };
 
   // ── INIT ──────────────────────────────────────────────────
   async function init() {
@@ -709,9 +717,25 @@
     if (p.bowling_style) details.push({ label:'Bowling', value:p.bowling_style });
     if (teamsStr)        details.push({ label:'Teams',   value:teamsStr, full:true });
 
+    const inSelectMode = selectMode && canEditThis;
+    const isSelected = selectedIds.has(p.id);
+
+    const cardClasses = [
+      'player-card',
+      canEditThis ? '' : 'readonly',
+      inSelectMode ? 'selectable' : '',
+      isSelected ? 'sel-selected' : ''
+    ].filter(Boolean).join(' ');
+
+    const clickAttr = inSelectMode ? `onclick="toggleSelect(${p.id})"` : '';
+    const checkbox  = selectMode
+      ? `<div class="sel-checkbox">${isSelected ? '✓' : ''}</div>`
+      : '';
+
     return `
-      <div class="player-card${canEditThis ? '' : ' readonly'}">
+      <div class="${cardClasses}" ${clickAttr}>
         <div class="player-card-top">
+          ${checkbox}
           <div class="player-avatar">${initials}</div>
           <div class="player-info">
             <div class="player-name">${esc(p.name || 'Unknown')}</div>
@@ -731,13 +755,14 @@
                 <div class="detail-value">${esc(String(d.value))}</div>
               </div>`).join('')}
           </div>` : ''}
+        ${!selectMode ? `
         <div class="player-card-actions">
           <button class="btn btn-ghost btn-sm" style="flex:1"
             onclick="openEditModal(${p.id})">
             ${canEditThis ? '✏ Edit' : '👁 View'}
           </button>
           ${canAdd ? `<button class="btn btn-danger btn-sm" onclick="openConfirmDelete(${p.id}, '${esc(p.name || '')}')">🗑</button>` : ''}
-        </div>
+        </div>` : ''}
       </div>`;
   }
 
@@ -767,15 +792,39 @@
     const totalPages = Math.ceil(total / PAGE_SIZE);
     const slice = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
-    const thead = cols.map(c => {
+    const checkboxHeader = selectMode ? `<th class="checkbox-col"></th>` : '';
+
+    const thead = checkboxHeader + cols.map(c => {
       const sorted = currentSort.col === c.key;
       const arrow = sorted ? (currentSort.dir === 'asc' ? ' ↑' : ' ↓') : '';
       return `<th class="${sorted ? 'sorted' : ''}" onclick="sortTable('${c.key}')">${c.label}${arrow}</th>`;
-    }).join('') + '<th>Actions</th>';
+    }).join('') + (selectMode ? '' : '<th>Actions</th>');
 
     const tbody = slice.map(p => {
       const canEditThis = playerEditable(p);
-      return `<tr>
+      const inSelectMode = selectMode && canEditThis;
+      const isSelected = selectedIds.has(p.id);
+
+      const rowClasses = [
+        inSelectMode ? 'selectable-row' : '',
+        isSelected ? 'sel-selected' : ''
+      ].filter(Boolean).join(' ');
+      const rowClick = inSelectMode ? `onclick="toggleSelect(${p.id})"` : '';
+
+      const checkboxCell = selectMode
+        ? `<td class="checkbox-col"><div class="sel-checkbox" style="${canEditThis ? '' : 'opacity:0.25'}">${isSelected ? '✓' : ''}</div></td>`
+        : '';
+
+      const actionsCell = selectMode ? '' : `
+        <td>
+          <div class="tbl-actions">
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); openEditModal(${p.id})">${canEditThis ? '✏' : '👁'}</button>
+            ${canAdd ? `<button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); openConfirmDelete(${p.id}, '${esc(p.name || '')}')">🗑</button>` : ''}
+          </div>
+        </td>`;
+
+      return `<tr class="${rowClasses}" ${rowClick}>
+        ${checkboxCell}
         <td style="font-weight:600">${esc(p.name || '—')}</td>
         <td>${esc(p.playing_role || '—')}</td>
         <td>${esc(p.current_team || '—')}</td>
@@ -784,12 +833,7 @@
         <td class="mono" style="font-size:0.78rem">${esc(p.bowling_style || '—')}</td>
         <td class="mono">${p.age || '—'}</td>
         <td><span class="verified-dot ${p.verified ? 'yes' : 'no'}"></span></td>
-        <td>
-          <div class="tbl-actions">
-            <button class="btn btn-ghost btn-sm" onclick="openEditModal(${p.id})">${canEditThis ? '✏' : '👁'}</button>
-            ${canAdd ? `<button class="btn btn-danger btn-sm" onclick="openConfirmDelete(${p.id}, '${esc(p.name || '')}')">🗑</button>` : ''}
-          </div>
-        </td>
+        ${actionsCell}
       </tr>`;
     }).join('');
 
@@ -849,6 +893,156 @@
       return myProfile.region && p.region === myProfile.region;
     }
     return false;
+  }
+
+  // ── SELECTION MODE ────────────────────────────────────────
+  function toggleSelectMode() {
+    selectMode = !selectMode;
+    selectedIds.clear();
+
+    document.getElementById('selectModeBar').classList.toggle('visible', selectMode);
+    document.getElementById('bulkEditBtn').classList.toggle('active', selectMode);
+    document.getElementById('bulkEditBtn').textContent = selectMode ? '✕ Exit Select' : '☑ Select';
+
+    updateSelectionUI();
+    renderPlayers();
+  }
+
+  function toggleSelect(id) {
+    const p = allPlayers.find(x => x.id === id);
+    if (!p || !playerEditable(p)) return;
+
+    if (selectedIds.has(id)) selectedIds.delete(id);
+    else selectedIds.add(id);
+
+    updateSelectionUI();
+    renderPlayers();
+  }
+
+  function selectAllVisible() {
+    getFiltered().forEach(p => {
+      if (playerEditable(p)) selectedIds.add(p.id);
+    });
+    updateSelectionUI();
+    renderPlayers();
+  }
+
+  function clearSelection() {
+    selectedIds.clear();
+    updateSelectionUI();
+    renderPlayers();
+  }
+
+  function updateSelectionUI() {
+    document.getElementById('selectedCount').textContent = selectedIds.size;
+    document.getElementById('applyBulkBtn').disabled = selectedIds.size === 0;
+  }
+
+  // ── BULK EDIT MODAL ───────────────────────────────────────
+  function openBulkModal() {
+    if (selectedIds.size === 0) return;
+
+    bulkFieldsEnabled = { region: false, batting: false, bowling: false };
+    document.getElementById('bulkCount').textContent = selectedIds.size;
+
+    document.getElementById('toggleRegion').classList.remove('on');
+    document.getElementById('toggleBatting').classList.remove('on');
+    document.getElementById('toggleBowling').classList.remove('on');
+
+    const bulkRegion = document.getElementById('bulk_region');
+    bulkRegion.classList.remove('enabled');
+    bulkRegion.value = '';
+
+    const bulkBatting = document.getElementById('bulk_batting_style');
+    bulkBatting.classList.remove('enabled');
+    bulkBatting.value = '';
+
+    const bulkBowling = document.getElementById('bulk_bowling_style');
+    bulkBowling.classList.remove('enabled');
+    bulkBowling.value = '';
+
+    showBulkAlert('', '');
+    document.getElementById('bulkModal').classList.add('open');
+  }
+
+  function closeBulkModal() {
+    document.getElementById('bulkModal').classList.remove('open');
+  }
+
+  function toggleBulkField(field) {
+    bulkFieldsEnabled[field] = !bulkFieldsEnabled[field];
+
+    const toggleMap = { region: 'toggleRegion', batting: 'toggleBatting', bowling: 'toggleBowling' };
+    const selectMap = { region: 'bulk_region', batting: 'bulk_batting_style', bowling: 'bulk_bowling_style' };
+
+    document.getElementById(toggleMap[field]).classList.toggle('on', bulkFieldsEnabled[field]);
+    document.getElementById(selectMap[field]).classList.toggle('enabled', bulkFieldsEnabled[field]);
+  }
+
+  function showBulkAlert(msg, type) {
+    const el = document.getElementById('bulkAlert');
+    if (!msg) { el.style.display = 'none'; return; }
+    el.textContent = msg;
+    el.className = `alert alert-${type}`;
+    el.style.display = 'block';
+  }
+
+  async function saveBulk() {
+    const anyEnabled = bulkFieldsEnabled.region || bulkFieldsEnabled.batting || bulkFieldsEnabled.bowling;
+    if (!anyEnabled) {
+      showBulkAlert('Toggle at least one field to apply.', 'error');
+      return;
+    }
+
+    const payload = {};
+
+    if (bulkFieldsEnabled.region) {
+      const v = document.getElementById('bulk_region').value;
+      if (!v) { showBulkAlert('Select a region to apply.', 'error'); return; }
+      payload.region = v;
+    }
+    if (bulkFieldsEnabled.batting) {
+      const v = document.getElementById('bulk_batting_style').value;
+      if (!v) { showBulkAlert('Select a batting style to apply.', 'error'); return; }
+      payload.batting_style = v;
+    }
+    if (bulkFieldsEnabled.bowling) {
+      const v = document.getElementById('bulk_bowling_style').value;
+      if (!v) { showBulkAlert('Select a bowling style to apply.', 'error'); return; }
+      payload.bowling_style = v;
+    }
+
+    // Only apply to players the current user is actually allowed to edit
+    const ids = [...selectedIds].filter(id => {
+      const p = allPlayers.find(x => x.id === id);
+      return p && playerEditable(p);
+    });
+
+    if (ids.length === 0) {
+      showBulkAlert('None of the selected players are editable.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('saveBulkBtn');
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+
+    try {
+      const { error } = await window.supabase
+        .from('tca_db_player_info')
+        .update(payload)
+        .in('id', ids);
+      if (error) throw error;
+
+      closeBulkModal();
+      toggleSelectMode();
+      await loadPlayers();
+    } catch(e) {
+      showBulkAlert(e.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Apply Changes';
+    }
   }
 
   // ── ADD MODAL ─────────────────────────────────────────────
@@ -1097,8 +1291,9 @@
 
   document.getElementById('playerModal').addEventListener('click', e => { if (e.target === e.currentTarget) closePlayerModal(); });
   document.getElementById('confirmModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConfirmModal(); });
+  document.getElementById('bulkModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeBulkModal(); });
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closePlayerModal(); closeConfirmModal(); }
+    if (e.key === 'Escape') { closePlayerModal(); closeConfirmModal(); closeBulkModal(); }
   });
 
   init();
