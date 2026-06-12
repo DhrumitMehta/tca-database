@@ -265,8 +265,8 @@
       <option value="">All Roles</option>
       <option value="batter">Batter</option>
       <option value="bowler">Bowler</option>
-      <option value="all-rounder">All-rounder</option>
-      <option value="wicket-keeper">Wicket-keeper</option>
+      <option value="all rounder">All Rounder</option>
+      <option value="wicket keeper">Wicket Keeper</option>
     </select>
     <select id="filterRegion" onchange="renderPlayers()">
       <option value="">All Regions</option>
@@ -340,7 +340,39 @@
       </div>
       <div class="form-group">
         <label>Region</label>
-        <input type="text" id="f_region" placeholder="e.g. Dar es Salaam">
+        <select id="f_region" onchange="handleRegionChange(this)">
+          <option value="">— select —</option>
+          <option>MOROGORO</option>
+          <option>GAIRO</option>
+          <option>GEITA</option>
+          <option>ARUSHA</option>
+          <option>DODOMA</option>
+          <option>KONGWA</option>
+          <option>AZANIA</option>
+          <option>BAGAMOYO</option>
+          <option>KITUNDA</option>
+          <option>KIGAMBONI</option>
+          <option>TANGA</option>
+          <option>KILINDI</option>
+          <option>KISARAWE</option>
+          <option>KILIMANJARO</option>
+          <option>KAWE</option>
+          <option>CHANIKA</option>
+          <option>CHAMWINO</option>
+          <option>MWANZA</option>
+          <option>ZANZIBAR</option>
+          <option>IRINGA</option>
+          <option>PANDAMBILI</option>
+          <option>KOROGWE</option>
+          <option>DAR ES SALAAM</option>
+          <option value="__new__">+ Add new region…</option>
+        </select>
+        <input type="text" id="f_region_custom" placeholder="Type new region name…"
+               style="display:none; margin-top:6px"
+               onkeydown="if(event.key==='Escape'){cancelCustomRegion();}">
+        <button type="button" class="btn btn-ghost btn-sm" id="f_region_cancel"
+                style="display:none; margin-top:6px; width:100%; justify-content:center"
+                onclick="cancelCustomRegion()">✕ Cancel new region</button>
       </div>
 
       <div class="form-section-label">Playing Style</div>
@@ -350,9 +382,9 @@
           <option value="">— select —</option>
           <option>Batter</option>
           <option>Bowler</option>
-          <option>All-rounder</option>
-          <option>Wicket-keeper</option>
-          <option>Wicket-keeper Batter</option>
+          <option>All Rounder</option>
+          <option>Wicket Keeper</option>
+          <option>Wicket Keeper Batter</option>
         </select>
       </div>
       <div class="form-group">
@@ -496,7 +528,7 @@
     document.getElementById('statVerified').textContent = allPlayers.filter(p => p.verified).length;
     document.getElementById('statBat').textContent      = allPlayers.filter(p => roleOf(p).includes('batter') && !roleOf(p).includes('all')).length;
     document.getElementById('statBowl').textContent     = allPlayers.filter(p => roleOf(p).includes('bowler') && !roleOf(p).includes('all')).length;
-    document.getElementById('statAll').textContent      = allPlayers.filter(p => roleOf(p).includes('all-rounder')).length;
+    document.getElementById('statAll').textContent      = allPlayers.filter(p => roleOf(p).includes('all rounder')).length;
     document.getElementById('statTeams').textContent    = new Set(allPlayers.map(p => p.current_team).filter(Boolean)).size;
   }
 
@@ -724,8 +756,8 @@
     clearForm();
     // Pre-fill region for regional coaches
     if (myProfile.role === 'regional_coach' && myProfile.region) {
-      document.getElementById('f_region').value = myProfile.region;
-      document.getElementById('f_region').readOnly = true;
+      setRegionValue(myProfile.region);
+      document.getElementById('f_region').disabled = true;
     }
     showModalAlert('', '');
     document.getElementById('playerModal').classList.add('open');
@@ -743,13 +775,16 @@
     document.getElementById('savePlayerBtn').style.display = editable ? '' : 'none';
     document.getElementById('readonlyNotice').style.display = editable ? 'none' : '';
 
-    const fields = ['name','player_id','club_id','age','verified','current_team','current_team_id','region','playing_role','batting_style','bowling_style'];
+    const fields = ['name','player_id','club_id','age','verified','current_team','current_team_id','playing_role','batting_style','bowling_style'];
     fields.forEach(f => {
       const el = document.getElementById('f_' + f);
       if (!el) return;
       el.value = p[f] != null ? p[f] : '';
       el.disabled = !editable;
     });
+    // Handle region separately
+    setRegionValue(p.region || '');
+    document.getElementById('f_region').disabled = !editable;
 
     showModalAlert('', '');
     document.getElementById('playerModal').classList.add('open');
@@ -758,18 +793,20 @@
   function closePlayerModal() {
     document.getElementById('playerModal').classList.remove('open');
     editingId = null;
-    // Re-enable all fields
     document.querySelectorAll('#playerModal input, #playerModal select').forEach(el => el.disabled = false);
-    document.getElementById('f_region').readOnly = false;
+    cancelCustomRegion();
   }
 
   function clearForm() {
-    ['name','player_id','club_id','age','current_team','current_team_id','region',
+    ['name','player_id','club_id','age','current_team','current_team_id',
      'playing_role','batting_style','bowling_style'].forEach(f => {
       const el = document.getElementById('f_' + f);
       if (el) { el.value = ''; el.disabled = false; }
     });
     document.getElementById('f_verified').value = 'false';
+    document.getElementById('f_region').value = '';
+    document.getElementById('f_region').disabled = false;
+    cancelCustomRegion();
   }
 
   // ── SAVE ──────────────────────────────────────────────────
@@ -792,7 +829,7 @@
       verified:         document.getElementById('f_verified').value === 'true',
       current_team:     strOrNull('f_current_team'),
       current_team_id:  numOrNull('f_current_team_id'),
-      region:           strOrNull('f_region'),
+      region:           getRegionValue(),
       playing_role:     strOrNull('f_playing_role'),
       batting_style:    strOrNull('f_batting_style'),
       bowling_style:    strOrNull('f_bowling_style'),
@@ -858,13 +895,65 @@
     }
   }
 
+  // ── REGION HELPERS ────────────────────────────────────────
+  const KNOWN_REGIONS = [
+    'MOROGORO','GAIRO','GEITA','ARUSHA','DODOMA','KONGWA','AZANIA',
+    'BAGAMOYO','KITUNDA','KIGAMBONI','TANGA','KILINDI','KISARAWE',
+    'KILIMANJARO','KAWE','CHANIKA','CHAMWINO','MWANZA','ZANZIBAR',
+    'IRINGA','PANDAMBILI','KOROGWE','DAR ES SALAAM'
+  ];
+
+  function handleRegionChange(sel) {
+    if (sel.value === '__new__') {
+      document.getElementById('f_region_custom').style.display = '';
+      document.getElementById('f_region_cancel').style.display = '';
+      setTimeout(() => document.getElementById('f_region_custom').focus(), 50);
+    } else {
+      document.getElementById('f_region_custom').style.display = 'none';
+      document.getElementById('f_region_cancel').style.display = 'none';
+      document.getElementById('f_region_custom').value = '';
+    }
+  }
+
+  function cancelCustomRegion() {
+    document.getElementById('f_region').value = '';
+    document.getElementById('f_region_custom').value = '';
+    document.getElementById('f_region_custom').style.display = 'none';
+    document.getElementById('f_region_cancel').style.display = 'none';
+  }
+
+  // Set the region dropdown (or custom field) to a given value
+  function setRegionValue(val) {
+    cancelCustomRegion();
+    if (!val) { document.getElementById('f_region').value = ''; return; }
+    const upper = val.toUpperCase();
+    if (KNOWN_REGIONS.includes(upper)) {
+      document.getElementById('f_region').value = upper;
+    } else {
+      // It's a custom/unknown region — show the custom input
+      document.getElementById('f_region').value = '__new__';
+      document.getElementById('f_region_custom').style.display = '';
+      document.getElementById('f_region_cancel').style.display = '';
+      document.getElementById('f_region_custom').value = val;
+    }
+  }
+
+  // Read the current region value from whichever input is active
+  function getRegionValue() {
+    const sel = document.getElementById('f_region').value;
+    if (sel === '__new__') {
+      return document.getElementById('f_region_custom').value.trim().toUpperCase() || null;
+    }
+    return sel || null;
+  }
+
   // ── HELPERS ───────────────────────────────────────────────
   function roleTagHTML(role) {
     const r = (role || '').toLowerCase();
-    if (r.includes('all-rounder')) return `<span class="tag tag-all">All-rounder</span>`;
-    if (r.includes('batter'))      return `<span class="tag tag-bat">Batter</span>`;
-    if (r.includes('bowler'))      return `<span class="tag tag-bowl">Bowler</span>`;
-    if (r.includes('keeper'))      return `<span class="tag tag-bat">WK</span>`;
+    if (r.includes('all rounder'))    return `<span class="tag tag-all">All Rounder</span>`;
+    if (r.includes('wicket keeper'))  return `<span class="tag tag-bat">WK</span>`;
+    if (r.includes('batter'))         return `<span class="tag tag-bat">Batter</span>`;
+    if (r.includes('bowler'))         return `<span class="tag tag-bowl">Bowler</span>`;
     return role ? `<span class="tag tag-neutral">${esc(role)}</span>` : '';
   }
 
