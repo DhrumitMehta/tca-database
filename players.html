@@ -310,33 +310,8 @@
         <input type="text" id="f_name" placeholder="e.g. Amir Hassan">
       </div>
       <div class="form-group">
-        <label>Player ID</label>
-        <input type="number" id="f_player_id" placeholder="auto">
-      </div>
-      <div class="form-group">
-        <label>Club ID</label>
-        <input type="number" id="f_club_id" placeholder="e.g. 12">
-      </div>
-      <div class="form-group">
         <label>Age</label>
         <input type="number" id="f_age" placeholder="e.g. 24" min="5" max="80">
-      </div>
-      <div class="form-group">
-        <label>Verified</label>
-        <select id="f_verified">
-          <option value="false">No</option>
-          <option value="true">Yes</option>
-        </select>
-      </div>
-
-      <div class="form-section-label">Team</div>
-      <div class="form-group full">
-        <label>Current Team</label>
-        <input type="text" id="f_current_team" placeholder="e.g. Dar es Salaam CC">
-      </div>
-      <div class="form-group">
-        <label>Current Team ID</label>
-        <input type="number" id="f_current_team_id" placeholder="e.g. 7">
       </div>
       <div class="form-group">
         <label>Region</label>
@@ -775,13 +750,22 @@
     document.getElementById('savePlayerBtn').style.display = editable ? '' : 'none';
     document.getElementById('readonlyNotice').style.display = editable ? 'none' : '';
 
-    const fields = ['name','player_id','club_id','age','verified','current_team','current_team_id','playing_role','batting_style','bowling_style'];
+    const fields = ['name', 'age'];
     fields.forEach(f => {
       const el = document.getElementById('f_' + f);
       if (!el) return;
       el.value = p[f] != null ? p[f] : '';
       el.disabled = !editable;
     });
+
+    // Selects need explicit option matching
+    setSelectValue('f_playing_role', p.playing_role);
+    setSelectValue('f_batting_style', p.batting_style);
+    setSelectValue('f_bowling_style', p.bowling_style);
+    ['f_playing_role','f_batting_style','f_bowling_style'].forEach(id => {
+      document.getElementById(id).disabled = !editable;
+    });
+
     // Handle region separately
     setRegionValue(p.region || '');
     document.getElementById('f_region').disabled = !editable;
@@ -798,12 +782,14 @@
   }
 
   function clearForm() {
-    ['name','player_id','club_id','age','current_team','current_team_id',
-     'playing_role','batting_style','bowling_style'].forEach(f => {
+    ['name', 'age'].forEach(f => {
       const el = document.getElementById('f_' + f);
       if (el) { el.value = ''; el.disabled = false; }
     });
-    document.getElementById('f_verified').value = 'false';
+    ['f_playing_role','f_batting_style','f_bowling_style'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = ''; el.disabled = false; }
+    });
     document.getElementById('f_region').value = '';
     document.getElementById('f_region').disabled = false;
     cancelCustomRegion();
@@ -818,21 +804,16 @@
     btn.disabled = true;
     btn.textContent = 'Saving…';
 
-    const numOrNull = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : parseInt(v); };
-    const strOrNull = id => { const v = document.getElementById(id).value.trim(); return v === '' ? null : v; };
+    const numOrNull = id => { const el = document.getElementById(id); if (!el) return null; const v = el.value.trim(); return v === '' ? null : parseInt(v); };
+    const strOrNull = id => { const el = document.getElementById(id); if (!el) return null; const v = el.value.trim(); return v === '' ? null : v; };
 
     const payload = {
       name,
-      player_id:        numOrNull('f_player_id'),
-      club_id:          numOrNull('f_club_id'),
-      age:              numOrNull('f_age'),
-      verified:         document.getElementById('f_verified').value === 'true',
-      current_team:     strOrNull('f_current_team'),
-      current_team_id:  numOrNull('f_current_team_id'),
-      region:           getRegionValue(),
-      playing_role:     strOrNull('f_playing_role'),
-      batting_style:    strOrNull('f_batting_style'),
-      bowling_style:    strOrNull('f_bowling_style'),
+      age:           numOrNull('f_age'),
+      region:        getRegionValue(),
+      playing_role:  strOrNull('f_playing_role'),
+      batting_style: strOrNull('f_batting_style'),
+      bowling_style: strOrNull('f_bowling_style'),
     };
 
     try {
@@ -895,7 +876,25 @@
     }
   }
 
-  // ── REGION HELPERS ────────────────────────────────────────
+  // Set a <select> to a value, matching case-insensitively
+  function setSelectValue(id, val) {
+    const el = document.getElementById(id);
+    if (!el || val == null) { if (el) el.value = ''; return; }
+    // Try exact match first
+    el.value = val;
+    if (el.value === String(val)) return;
+    // Try case-insensitive match
+    const lower = String(val).toLowerCase();
+    for (const opt of el.options) {
+      if (opt.value.toLowerCase() === lower || opt.text.toLowerCase() === lower) {
+        el.value = opt.value;
+        return;
+      }
+    }
+    el.value = '';
+  }
+
+
   const KNOWN_REGIONS = [
     'MOROGORO','GAIRO','GEITA','ARUSHA','DODOMA','KONGWA','AZANIA',
     'BAGAMOYO','KITUNDA','KIGAMBONI','TANGA','KILINDI','KISARAWE',
