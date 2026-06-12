@@ -1536,8 +1536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Modal click-outside to close
-  document.getElementById('configModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeConfig(); });
+// Modal click-outside to close
   document.getElementById('pdfTitleModal').addEventListener('click', e => { if (e.target === e.currentTarget) closePDFTitleModal(); });
   document.getElementById('xlsTitleModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeExcelTitleModal(); });
   document.getElementById('importPDFModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeImportPDFModal(); });
@@ -2557,8 +2556,6 @@ function showError(msg) {
       <div class="icon">⚠️</div>
       <h3>Connection Error</h3>
       <p>${msg}</p>
-      <br>
-      <button class="btn btn-primary" onclick="openConfig()">⚙ Check Config</button>
     </div>`;
 }
 
