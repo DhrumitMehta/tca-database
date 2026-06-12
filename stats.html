@@ -1482,7 +1482,7 @@ let _importMatchedIds = [];
 
 // ─── INIT ─────────────────────────────────────────────────
 async function init() {
-  myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach']);
+  myProfile = await requireAuth(['board', 'selector', 'national_coach', 'regional_coach', 'ngb_paid_staff']);
   if (!myProfile) return;
 
   loadExportHistoryFromStorage();
