@@ -32,4 +32,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python match_info_scraper.py --batch-size 100
+        run: python scrapers/match_info_scraper.py --batch-size 100
