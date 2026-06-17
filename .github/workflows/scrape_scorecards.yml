@@ -29,4 +29,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python scrapers/scorecard_scraper.py --batch-size 200
+        run: python scrapers/scorecard_scraper.py --batch-size 100
