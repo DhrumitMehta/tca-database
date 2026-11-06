@@ -57,7 +57,7 @@ supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 CLUB_ID   = 7605
 CLUB_SLUG = "Tanzania"
 
-BATCH_SIZE       = 350
+BATCH_SIZE       = 30
 CHECKPOINT_EVERY = 20
 SCRAPE_DELAY     = 1.5
 

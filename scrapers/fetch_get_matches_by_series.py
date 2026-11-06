@@ -1,41 +1,34 @@
 """
-Fetches getMatches responses by iterating seriesId from 1 to SERIES_ID_END,
-saving each series' batch to responses_matches/matches_series{seriesId}.json.
+Updates matches for EXISTING series after checking for new series.
 
-Resume logic (series-level, using the real API signal):
-  - Before touching getMatches, we check getSeriesDetails for every already
-    -saved series. That endpoint returns an explicit `data.status` field:
-    "COMPLETED" or "ONGOING" (there may be other values too - anything not
-    recognized as completed is treated as still-open, to be safe).
-  - A saved series whose status is "COMPLETED" is skipped - no getMatches
-    call, since no new matches are expected.
-  - A saved series whose status is anything else (e.g. "ONGOING", or an
-    unrecognized value) is RE-fetched via getMatches, since more matches
-    may have been added since we last saved it.
-  - A series with no file yet is fetched fresh via getMatches (no need to
-    check getSeriesDetails first for these - we don't have anything to
-    decide about).
+For every series we already have a file for (responses_matches/matches_series{id}.json):
+  1. Call getSeriesDetails (cheap) to check status.
+     - status == "COMPLETED" (and not stale-overridden) -> CLOSED -> skip, no getMatches call.
+     - anything else ("ONGOING", unrecognized, or details call failed) -> OPEN -> re-fetch via
+       getMatches and overwrite the saved file.
+  2. New series (ids with no saved file) are discovered.
 
-This checking step costs one lightweight getSeriesDetails call per already
--saved series (cheap payload), which is far less wasteful than blindly
-re-pulling every series' full getMatches payload "just in case."
-
-getMatches doesn't support matchId filtering or an offset param, so paging
-by seriesId is the way to get full historical coverage instead of just
-"most recent N".
+Daily request budget:
+  - This script enforces a hard cap (REQUEST_BUDGET, default 500) on the total number of HTTP
+    requests it makes in a single run, counting BOTH getSeriesDetails and getMatches calls.
+  - Series are processed in ascending order. Once the budget would be exceeded, the run stops
+    early and reports which series were not yet checked, so you can resume next run/day.
+  - Worst case is 2 requests per open series (1 details + 1 matches) and 1 request per closed
+    series (details only, once we know it's closed we stop there).
 
 Usage:
     python fetch_get_matches_by_series.py
     python fetch_get_matches_by_series.py --inspect-status
-        # prints the getSeriesDetails status for every already-saved
-        # series, without fetching any getMatches data. Useful for a
-        # dry-run / sanity check before doing a real run.
+        # prints the getSeriesDetails status for every already-saved series, without making
+        # any getMatches calls or writing any files. Still counts against REQUEST_BUDGET.
+    python fetch_get_matches_by_series.py --budget 200
+        # override the request budget for this run
 """
 
+import argparse
 import json
 import os
 import re
-import sys
 import time
 from datetime import datetime, timedelta
 
@@ -50,31 +43,90 @@ X_CONSUMER_KEY = "Tan#$72za5"    # <-- same key as your scorecard fetcher
 
 OUT_DIR = "responses_matches"
 
-SERIES_ID_START = 1
-SERIES_ID_END = 400  # inclusive
-
 LIMIT = 500  # per-series match cap; a series is unlikely to have more than this
 
 DELAY_BETWEEN_REQUESTS_SECONDS = 1
+
+MAX_CONSECUTIVE_MISSES = 5  # stop probing after this many IDs in a row that don't exist for this club
+
+# Hard cap on total HTTP requests (getSeriesDetails + getMatches combined) made in one run.
+REQUEST_BUDGET = 500
 
 HEADERS = {
     "x-api-key": X_API_KEY,
     "x-consumer-key": X_CONSUMER_KEY,
 }
 
-# Confirmed via getSeriesDetails: data.status == "COMPLETED" for finished
-# series, "ONGOING" for active ones. Anything not in this "closed" set is
-# treated as still-open (conservative default: re-fetch rather than miss
-# new matches) - UNLESS the age override below kicks in.
+# Confirmed via getSeriesDetails: data.status == "COMPLETED" for finished series,
+# "ONGOING" for active ones. Anything not in this "closed" set is treated as still-open
+# (conservative default: re-fetch rather than miss new matches) - UNLESS the age override
+# below kicks in.
 CLOSED_STATUS_VALUES = {"COMPLETED"}
 
-# Fallback override: if a series isn't marked "COMPLETED" but its
-# startDate/endDate (whichever is more recent / present) is older than this,
-# treat it as closed anyway. Catches stale "ONGOING" data-entry (e.g. a
-# series someone forgot to mark finished) without relying on status alone.
+# Fallback override: if a series isn't marked "COMPLETED" but its startDate/endDate
+# (whichever is more recent / present) is older than this, treat it as closed anyway.
+# Catches stale "ONGOING" data-entry (e.g. a series someone forgot to mark finished)
+# without relying on status alone.
 STALE_SERIES_AGE = timedelta(days=365)
 
 DATE_FORMATS = ["%m/%d/%Y", "%Y-%m-%d"]
+
+os.makedirs(OUT_DIR, exist_ok=True)
+
+FILENAME_RE = re.compile(r"^matches_series(\d+)\.json$")
+
+STATE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "series_state.json")
+
+def load_state():
+    state = {"closed": {}}
+    if os.path.exists(STATE_FILE):
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            closed = raw.get("closed", {})
+            if isinstance(closed, list):  # migrate old format: [101, 102] -> {"101": None, ...}
+                closed = {str(i): None for i in closed}
+            state["closed"] = {str(k): v for k, v in closed.items()}
+        except (ValueError, OSError) as e:
+            print(f"Could not read {STATE_FILE} ({e}); starting with empty state.")
+    return state
+
+
+def save_state(state):
+    ordered = {k: state["closed"][k] for k in sorted(state["closed"], key=int)}
+    tmp = STATE_FILE + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump({"closed": ordered}, f, indent=2, ensure_ascii=False)
+    os.replace(tmp, STATE_FILE)
+
+
+def get_series_name(series_id):
+    """Reads seriesName from the saved matches file. Returns None if unavailable
+    (e.g. the series has no matches yet)."""
+    path = f"{OUT_DIR}/matches_series{series_id}.json"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            matches = json.load(f).get("data") or []
+        for m in matches:
+            if m.get("seriesName"):
+                return m["seriesName"]
+    except (OSError, ValueError):
+        pass
+    return None
+
+class BudgetExhausted(Exception):
+    """Raised internally when the request budget would be exceeded."""
+
+
+class RequestCounter:
+    def __init__(self, budget):
+        self.budget = budget
+        self.used = 0
+
+    def spend(self, n=1):
+        if self.used + n > self.budget:
+            raise BudgetExhausted()
+        self.used += n
 
 
 def parse_series_date(value):
@@ -91,9 +143,9 @@ def parse_series_date(value):
 
 def series_is_stale_by_date(details_data):
     """
-    Returns True if the series' most relevant date (endDate if present,
-    else startDate) is older than STALE_SERIES_AGE. Returns False if no
-    usable date is found (so the status field remains the deciding factor).
+    Returns True if the series' most relevant date (endDate if present, else startDate)
+    is older than STALE_SERIES_AGE. Returns False if no usable date is found (so the
+    status field remains the deciding factor).
     """
     end_date = parse_series_date(details_data.get("endDate"))
     start_date = parse_series_date(details_data.get("startDate"))
@@ -102,28 +154,28 @@ def series_is_stale_by_date(details_data):
         return False
     return (datetime.now() - reference_date) > STALE_SERIES_AGE
 
-os.makedirs(OUT_DIR, exist_ok=True)
-
-FILENAME_RE = re.compile(r"^matches_series(\d+)\.json$")
-
 
 def get_saved_series_ids():
-    """Return the sorted set of seriesIds we already have a matches file for."""
+    """Return the sorted list of seriesIds we already have a matches file for."""
     ids = set()
     for fname in os.listdir(OUT_DIR):
         m = FILENAME_RE.match(fname)
         if m:
             ids.add(int(m.group(1)))
-    return ids
+    return sorted(ids)
 
 
-def fetch_series_details(series_id):
+def fetch_series_details(series_id, counter):
     """
-    Calls getSeriesDetails for a series and returns the `data` dict (which
-    includes "status", "startDate", "endDate", etc.), or None if the call
-    failed / response malformed (treated as "unknown -> re-fetch to be
-    safe" by the caller).
+    Calls getSeriesDetails for a series and returns the `data` dict (which includes
+    "status", "startDate", "endDate", etc.), or None if the call failed / response
+    malformed (treated as "unknown -> re-fetch to be safe" by the caller).
+
+    Raises BudgetExhausted if this call would exceed the request budget (raised BEFORE
+    the request is made).
     """
+    counter.spend(1)
+
     params = {
         "clubId": CLUB_ID,
         "seriesId": str(series_id),
@@ -152,67 +204,42 @@ def fetch_series_details(series_id):
     return data.get("data", {})
 
 
-def classify_saved_series(saved_ids):
+def classify_series(series_id, counter):
     """
-    For every already-saved series, check getSeriesDetails and classify as
-    "closed" (skip, no getMatches call) or "open" (re-fetch via getMatches).
+    Checks getSeriesDetails for one series and classifies it as "closed" or "open".
 
     Decision order:
       1. status == "COMPLETED" -> closed.
-      2. Otherwise, if the series' start/end date is older than
-         STALE_SERIES_AGE -> closed anyway (catches stale "ONGOING" entries
-         that were probably just never marked finished).
+      2. Otherwise, if the series' start/end date is older than STALE_SERIES_AGE ->
+         closed anyway (catches stale "ONGOING" entries that were probably just never
+         marked finished).
       3. Otherwise -> open (status is "ONGOING"/unknown and it's recent).
-      4. If the details call itself failed (details is None) -> open, to
-         be safe (we can't confirm it's closed, so don't risk skipping it).
-
-    Returns dict {series_id: "closed"|"open"}.
+      4. If the details call itself failed (details is None) -> open, to be safe
+         (we can't confirm it's closed, so don't risk skipping it).
     """
-    result = {}
-    for series_id in sorted(saved_ids):
-        details = fetch_series_details(series_id)
+    details = fetch_series_details(series_id, counter)
 
-        if details is None:
-            result[series_id] = "open"
-            print(f"[series {series_id}] details unavailable -> will re-fetch matches")
-            time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
-            continue
+    if details is None:
+        print(f"[series {series_id}] details unavailable -> treating as OPEN")
+        return "open"
 
-        status = details.get("status")
+    status = details.get("status")
 
-        if status in CLOSED_STATUS_VALUES:
-            result[series_id] = "closed"
-        elif series_is_stale_by_date(details):
-            result[series_id] = "closed"
-            print(f"[series {series_id}] status={status!r} but dates are >1yr old "
-                  f"(start={details.get('startDate')!r}, end={details.get('endDate')!r}) "
-                  f"-> treating as closed anyway")
-        else:
-            result[series_id] = "open"
-            print(f"[series {series_id}] status={status!r} -> will re-fetch matches")
-
-        time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
-    return result
+    if status in CLOSED_STATUS_VALUES:
+        print(f"[series {series_id}] status={status!r} -> CLOSED (skip)")
+        return "closed"
+    elif series_is_stale_by_date(details):
+        print(f"[series {series_id}] status={status!r} but dates are >1yr old "
+              f"(start={details.get('startDate')!r}, end={details.get('endDate')!r}) "
+              f"-> treating as CLOSED anyway")
+        return "closed"
+    else:
+        print(f"[series {series_id}] status={status!r} -> OPEN (will update)")
+        return "open"
 
 
-def inspect_status():
-    """Dry-run: print getSeriesDetails status for every saved series, no getMatches calls."""
-    saved_ids = get_saved_series_ids()
-    if not saved_ids:
-        print("No saved series files found.")
-        return
-    print(f"Checking getSeriesDetails status for {len(saved_ids)} saved series...")
-    classification = classify_saved_series(saved_ids)
-    closed = [sid for sid, s in classification.items() if s == "closed"]
-    open_ = [sid for sid, s in classification.items() if s == "open"]
-    print("---")
-    print(f"Closed (would skip): {len(closed)}")
-    print(f"Open/unknown (would re-fetch): {len(open_)}")
-    if open_:
-        print(f"Open/unknown series IDs: {sorted(open_)}")
-
-
-def fetch_matches(series_id):
+def fetch_matches(series_id, counter):
+    counter.spend(1)
     params = {
         "clubId": CLUB_ID,
         "seriesId": str(series_id),
@@ -222,95 +249,179 @@ def fetch_matches(series_id):
     return r
 
 
-def main():
-    if "--inspect-status" in sys.argv:
-        inspect_status()
-        return
+def update_series_matches(series_id, counter):
+    """Re-fetches getMatches for one open series and overwrites its saved file."""
+    try:
+        r = fetch_matches(series_id, counter)
+    except requests.RequestException as e:
+        print(f"[series {series_id}] getMatches request error: {e}")
+        return False
 
-    saved_ids = get_saved_series_ids()
+    if r.status_code != 200:
+        print(f"[series {series_id}] getMatches status={r.status_code} (not updated)")
+        return False
 
-    if saved_ids:
-        print(f"Found {len(saved_ids)} existing series files. "
-              f"Checking getSeriesDetails to see which need re-fetching...")
-        scraped_status = classify_saved_series(saved_ids)
-        closed_count = sum(1 for v in scraped_status.values() if v == "closed")
-        open_count = sum(1 for v in scraped_status.values() if v == "open")
-        print(f"-> {closed_count} closed (will skip), {open_count} open/unknown (will re-fetch).")
-    else:
-        print("No existing series files found. Starting fresh.")
-        scraped_status = {}
+    data = r.json()
 
-    fetched = 0
-    skipped = 0
-    refetched = 0
-    empty = []
-    failed = []
+    if data.get("responseState") is False or data.get("errorMessage"):
+        print(f"[series {series_id}] getMatches error: {data.get('errorMessage')}")
+        return False
 
-    for series_id in range(SERIES_ID_START, SERIES_ID_END + 1):
-        status = scraped_status.get(series_id)  # "closed" | "open" | None (never saved)
+    matches = data.get("data") or []
+    out_path = f"{OUT_DIR}/matches_series{series_id}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
 
-        if status == "closed":
-            skipped += 1
-            continue
+    print(f"[series {series_id}] updated, saved {len(matches)} matches")
 
-        is_refetch = status == "open"
+    if len(matches) == LIMIT:
+        print(
+            f"  WARNING: series {series_id} returned exactly LIMIT ({LIMIT}) matches - "
+            f"this series may have more than we captured. Consider raising LIMIT."
+        )
+    return True
 
+CHECKPOINT_EVERY = 5  # print a progress checkpoint after this many new series are saved
+
+
+def discover_new_series(counter, start_id):
+    """Probe series IDs above start_id. For each ID that exists for this club,
+    fetch its matches and save the file (written immediately). Stops after
+    MAX_CONSECUTIVE_MISSES misses in a row, or when the request budget runs out."""
+    discovered = []
+    misses = 0
+    series_id = start_id + 1
+
+    while misses < MAX_CONSECUTIVE_MISSES:
         try:
-            r = fetch_matches(series_id)
-        except requests.RequestException as e:
-            print(f"[series {series_id}] request error: {e}")
-            failed.append(series_id)
-            continue
-
-        if r.status_code != 200:
-            print(f"[series {series_id}] status={r.status_code} (skipping, not saved)")
-            failed.append(series_id)
-            continue
-
-        data = r.json()
-
-        if data.get("responseState") is False or data.get("errorMessage"):
-            print(f"[series {series_id}] error: {data.get('errorMessage')}")
-            failed.append(series_id)
-            continue
-
-        matches = data.get("data", [])
-        if not matches:
-            # Not necessarily a problem - series IDs may not be contiguous
-            # or some may belong to other clubs. Track it but don't treat
-            # as a failure.
-            empty.append(series_id)
-            print(f"[series {series_id}] 0 matches")
-            time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
-            continue
-
-        out_path = f"{OUT_DIR}/matches_series{series_id}.json"
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2)
-
-        fetched += 1
-        if is_refetch:
-            refetched += 1
-            print(f"[series {series_id}] RE-fetched (was open/ongoing), saved {len(matches)} matches")
-        else:
-            print(f"[series {series_id}] saved {len(matches)} matches ({fetched} series fetched so far)")
-
-        if len(matches) == LIMIT:
-            print(
-                f"  WARNING: series {series_id} returned exactly LIMIT "
-                f"({LIMIT}) matches - this series may have more than we "
-                f"captured. Consider raising LIMIT if this happens often."
-            )
+            details = fetch_series_details(series_id, counter)
+        except BudgetExhausted:
+            print(f"\nBudget reached during discovery at series {series_id}. "
+                  f"Resume next run.")
+            break
 
         time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
 
+        if not details:  # None (error / not this club's series) or empty
+            misses += 1
+            series_id += 1
+            continue
+
+        misses = 0
+        print(f"[series {series_id}] NEW series found (status={details.get('status')!r})")
+        try:
+            if update_series_matches(series_id, counter):
+                discovered.append(series_id)
+                if len(discovered) % CHECKPOINT_EVERY == 0:
+                    print(f"  >> Checkpoint: {len(discovered)} new series saved so far "
+                          f"(latest: {series_id}, requests used: {counter.used}/{counter.budget})")
+        except BudgetExhausted:
+            print(f"\nBudget reached before fetching matches for new series {series_id}.")
+            break
+
+        time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
+        series_id += 1
+
+    return discovered
+
+def run(counter, inspect_only=False):
+    state = load_state()
+    all_saved_ids = get_saved_series_ids()
+
+    # Backfill names for closed series that don't have one yet (no requests needed).
+    if not inspect_only:
+        backfilled = 0
+        for key, name in state["closed"].items():
+            if not name:
+                found = get_series_name(int(key))
+                if found:
+                    state["closed"][key] = found
+                    backfilled += 1
+        if backfilled:
+            print(f"Backfilled names for {backfilled} closed series.")
+            save_state(state)
+
+    saved_ids = [s for s in all_saved_ids if str(s) not in state["closed"]]
+    skipped_known_closed = len(all_saved_ids) - len(saved_ids)
+
+    print(f"Found {len(all_saved_ids)} series files "
+          f"({skipped_known_closed} already known closed, {len(saved_ids)} to check). "
+          f"Budget: {counter.budget} requests.")
+
+    new_series = []
+    if not inspect_only:
+        # Use ALL saved ids (not just open ones) as the discovery starting point.
+        new_series = discover_new_series(counter, max(all_saved_ids, default=0))
+
+    closed = []
+    updated = []
+    still_open_unchecked = []
+    unprocessed = []
+
+    try:
+        for idx, series_id in enumerate(saved_ids):
+            try:
+                classification = classify_series(series_id, counter)
+            except BudgetExhausted:
+                unprocessed = saved_ids[idx:]
+                print(f"\nRequest budget ({counter.budget}) reached during status checks. "
+                      f"Stopping early.")
+                break
+
+            time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
+
+            if classification == "closed":
+                closed.append(series_id)
+                if not inspect_only:
+                    state["closed"][str(series_id)] = get_series_name(series_id)
+                    save_state(state)  # persist immediately so progress survives a crash
+                continue
+
+            if inspect_only:
+                still_open_unchecked.append(series_id)
+                continue
+
+            try:
+                if update_series_matches(series_id, counter):
+                    updated.append(series_id)
+            except BudgetExhausted:
+                unprocessed = saved_ids[idx:]
+                print(f"\nRequest budget ({counter.budget}) reached before updating series "
+                      f"{series_id}. Stopping early.")
+                break
+
+            time.sleep(DELAY_BETWEEN_REQUESTS_SECONDS)
+    finally:
+        if not inspect_only:
+            save_state(state)
+
     print("---")
-    print(f"Fetched: {fetched} (of which re-fetched open series: {refetched}), "
-          f"skipped (closed): {skipped}, empty: {len(empty)}, failed: {len(failed)}")
-    if empty:
-        print(f"Empty series IDs: {empty}")
-    if failed:
-        print(f"Failed series IDs: {failed}")
+    print(f"Requests used: {counter.used}/{counter.budget}")
+    print(f"Skipped (already known closed, 0 requests): {skipped_known_closed}")
+    if new_series:
+        print(f"New series added: {new_series}")
+    print(f"Newly closed this run: {len(closed)}")
+    if inspect_only:
+        print(f"Open (would update): {len(still_open_unchecked)}")
+        if still_open_unchecked:
+            print(f"Open series IDs: {still_open_unchecked}")
+    else:
+        print(f"Updated: {len(updated)}")
+        if updated:
+            print(f"Updated series IDs: {updated}")
+    if unprocessed:
+        print(f"Not yet checked this run (resume next time): {unprocessed}")
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--inspect-status", action="store_true",
+                         help="Only print status for saved series; no getMatches calls, no writes.")
+    parser.add_argument("--budget", type=int, default=REQUEST_BUDGET,
+                         help=f"Max total HTTP requests this run (default {REQUEST_BUDGET}).")
+    args = parser.parse_args()
+
+    counter = RequestCounter(args.budget)
+    run(counter, inspect_only=args.inspect_status)
 
 
 if __name__ == "__main__":

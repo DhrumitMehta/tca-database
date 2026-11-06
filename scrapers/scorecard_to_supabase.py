@@ -9,6 +9,9 @@ Usage:
 
     # Every scorecard_match*.json in responses/:
     python scorecard_to_supabase.py --all
+
+    # Re-upsert all files, ignoring what's already in the DB:
+    python scorecard_to_supabase.py --all --full
 """
 
 import argparse
@@ -28,6 +31,31 @@ SUPABASE_KEY = os.environ["SUPABASE_KEY"]  # service key needed to write
 RESPONSES_DIR = "responses"
 BATCH_SIZE = 500  # rows per upsert call, not API requests — Supabase, not CricClubs
 
+REFRESH_WINDOW = 100  # re-process the most recent N match_ids already in the DB (may have been unfinished)
+
+
+def get_existing_match_ids(supabase):
+    """Return the set of match_ids already in the batting table.
+    Paginates because Supabase caps each response at 1000 rows by default."""
+    ids = set()
+    page_size = 1000
+    start = 0
+    while True:
+        resp = (
+            supabase.table("tca_db_scorecard_batting_v2")
+            .select("match_id")
+            .order("match_id")
+            .order("inning_number")
+            .order("batter_id")  # stable ordering so pages don't overlap
+            .range(start, start + page_size - 1)
+            .execute()
+        )
+        rows = resp.data
+        ids.update(r["match_id"] for r in rows)
+        if len(rows) < page_size:
+            break
+        start += page_size
+    return ids
 
 def clean_name(first, last):
     return f"{first} {last}".strip()
@@ -86,35 +114,33 @@ def parse_scorecard(raw_json, match_id):
 
             batting_rows.append({
                 "match_id": match_id,
-                "innings": innings_num,
+                "inning_number": innings_num,
                 "batting_position": pos,
                 "team_id": innings.get("teamId"),
-                "team_name": innings.get("teamName"),
-                "player_id": bat["playerID"],
-                "player_name": clean_name(bat["firstName"], bat["lastName"]),
-                "runs_scored": bat.get("runsScored", 0),
-                "balls_faced": bat.get("ballsFaced", 0),
+                "batting_team": innings.get("teamName"),
+                "batter_id": bat["playerID"],
+                "batter_name": clean_name(bat["firstName"], bat["lastName"]),
+                "runs": bat.get("runsScored", 0),
+                "balls": bat.get("ballsFaced", 0),
                 "fours": bat.get("fours", 0),
-                "sixers": bat.get("sixers", 0),
+                "sixes": bat.get("sixers", 0),
                 "is_out": bat.get("isOut") == "1",
-                "how_out": map_how_out(bat.get("howOut"), bat.get("outStringNoLink")),
+                "dismissal_type": map_how_out(bat.get("howOut"), bat.get("outStringNoLink")),
                 "out_description": bat.get("outStringNoLink") or None,
-                "dismissal_bowler_id": int(wicket_taker1) if wicket_taker1 else None,
-                "dismissal_bowler_name": bowler_lookup.get(wicket_taker1) if wicket_taker1 else None,
-                # NOTE: fielder only resolves if they also bowled in this innings.
-                # If they didn't bowl, this stays NULL — that's expected, not a bug.
-                "dismissal_fielder_id": int(wicket_taker2) if wicket_taker2 else None,
-                "dismissal_fielder_name": bowler_lookup.get(wicket_taker2) if wicket_taker2 else None,
+                "bowler_id": int(wicket_taker1) if wicket_taker1 else None,
+                "bowler_name": bowler_lookup.get(wicket_taker1) if wicket_taker1 else None,
+                "fielder_id": int(wicket_taker2) if wicket_taker2 else None,
+                "fielder_name": bowler_lookup.get(wicket_taker2) if wicket_taker2 else None,
                 "batting_style": bat.get("battingStyle") or None,
             })
 
         for bowl in innings.get("bowling", []):
             bowling_rows.append({
                 "match_id": match_id,
-                "innings": innings_num,
+                "inning_number": innings_num,
                 "team_id": bowl.get("teamId"),
-                "player_id": bowl["playerID"],
-                "player_name": clean_name(bowl["firstName"], bowl["lastName"]),
+                "bowler_id": bowl["playerID"],
+                "bowler_name": clean_name(bowl["firstName"], bowl["lastName"]),
                 "balls": bowl.get("balls", 0),
                 "runs": bowl.get("runs", 0),
                 "wickets": bowl.get("wickets", 0),
@@ -134,24 +160,23 @@ def match_id_from_filename(path):
     return int(m.group(1)) if m else None
 
 
-def find_duplicate_keys(rows):
-    """Find rows sharing the same (match_id, innings, player_id) — the upsert
+def find_duplicate_keys(rows, innings_field, id_field):
+    """Find rows sharing the same (match_id, innings_field, id_field) — the upsert
     conflict key. Returns a dict of key -> list of rows."""
     from collections import defaultdict
     groups = defaultdict(list)
     for row in rows:
-        key = (row["match_id"], row["innings"], row["player_id"])
+        key = (row["match_id"], row[innings_field], row[id_field])
         groups[key].append(row)
     return {k: v for k, v in groups.items() if len(v) > 1}
 
 
-def dedupe_keep_first(rows):
-    """Drop later rows sharing the same (match_id, innings, player_id) conflict
-    key, keeping only the first occurrence."""
+def dedupe_keep_first(rows, innings_field, id_field):
+    """Drop later rows sharing the same conflict key, keeping only the first occurrence."""
     seen = set()
     deduped = []
     for row in rows:
-        key = (row["match_id"], row["innings"], row["player_id"])
+        key = (row["match_id"], row[innings_field], row[id_field])
         if key in seen:
             continue
         seen.add(key)
@@ -165,14 +190,14 @@ BOWLING_SUM_FIELDS = [
 ]
 
 
-def dedupe_sum_bowling(rows):
-    """Merge rows sharing the same (match_id, innings, player_id) conflict key
-    by summing the numeric stat fields (spells split across a rain delay,
-    retired-hurt return, etc). Non-numeric fields are taken from the first entry."""
+def dedupe_sum_bowling(rows, innings_field, id_field):
+    """Merge rows sharing the same conflict key by summing the numeric stat
+    fields (spells split across a rain delay, retired-hurt return, etc).
+    Non-numeric fields are taken from the first entry."""
     from collections import OrderedDict
     merged = OrderedDict()
     for row in rows:
-        key = (row["match_id"], row["innings"], row["player_id"])
+        key = (row["match_id"], row[innings_field], row[id_field])
         if key not in merged:
             merged[key] = dict(row)
         else:
@@ -189,12 +214,12 @@ def chunked(items, size):
 def upsert_rows(supabase, batting_rows, bowling_rows):
     for batch in chunked(batting_rows, BATCH_SIZE):
         supabase.table("tca_db_scorecard_batting_v2") \
-            .upsert(batch, on_conflict="match_id,innings,player_id") \
+            .upsert(batch, on_conflict="match_id,inning_number,batter_id") \
             .execute()
 
     for batch in chunked(bowling_rows, BATCH_SIZE):
         supabase.table("tca_db_scorecard_bowling_v2") \
-            .upsert(batch, on_conflict="match_id,innings,player_id") \
+            .upsert(batch, on_conflict="match_id,inning_number,bowler_id") \
             .execute()
 
 
@@ -209,9 +234,27 @@ def run_single(supabase, json_path, match_id):
     print("Upserted to Supabase.")
 
 
-def run_all(supabase):
+def run_all(supabase, full=False):
     files = sorted(glob.glob(os.path.join(RESPONSES_DIR, "scorecard_match*.json")))
     print(f"Found {len(files)} scorecard files in {RESPONSES_DIR}/")
+
+    if not full:
+        existing_ids = get_existing_match_ids(supabase)
+        # the most recent N match_ids already in the DB get re-processed too
+        refresh_ids = set(sorted(existing_ids)[-REFRESH_WINDOW:])
+        print(f"{len(existing_ids)} matches already in DB; "
+              f"re-checking the latest {len(refresh_ids)}")
+
+        def needs_processing(path):
+            mid = match_id_from_filename(path)
+            return mid is None or mid not in existing_ids or mid in refresh_ids
+
+        files = [p for p in files if needs_processing(p)]
+        print(f"{len(files)} files to process (new + refresh window)")
+
+    if not files:
+        print("Nothing to do.")
+        return
 
     all_batting_rows = []
     all_bowling_rows = []
@@ -240,27 +283,27 @@ def run_all(supabase):
     print(f"Parsed {len(all_batting_rows)} batting rows, {len(all_bowling_rows)} bowling rows "
           f"from {len(files) - len(skipped)} matches ({len(skipped)} skipped)")
 
-    batting_dupes = find_duplicate_keys(all_batting_rows)
-    bowling_dupes = find_duplicate_keys(all_bowling_rows)
+    batting_dupes = find_duplicate_keys(all_batting_rows, "inning_number", "batter_id")
+    bowling_dupes = find_duplicate_keys(all_bowling_rows, "inning_number", "bowler_id")
 
     if batting_dupes or bowling_dupes:
         print(f"\nFound {len(batting_dupes)} duplicate batting keys, "
               f"{len(bowling_dupes)} duplicate bowling keys (same match/innings/player "
               f"appearing more than once):\n")
         for (match_id, innings, player_id), dupe_rows in list(batting_dupes.items())[:20]:
-            names = [r["player_name"] for r in dupe_rows]
-            runs = [r["runs_scored"] for r in dupe_rows]
+            names = [r["batter_name"] for r in dupe_rows]
+            runs = [r["runs"] for r in dupe_rows]
             print(f"  batting: match {match_id}, innings {innings}, player {player_id} "
-                  f"({names[0]}): {len(dupe_rows)} entries, runs={runs} -> kept first")
+                f"({names[0]}): {len(dupe_rows)} entries, runs={runs} -> kept first")
         for (match_id, innings, player_id), dupe_rows in list(bowling_dupes.items())[:20]:
-            names = [r["player_name"] for r in dupe_rows]
+            names = [r["bowler_name"] for r in dupe_rows]
             wickets = [r["wickets"] for r in dupe_rows]
             print(f"  bowling: match {match_id}, innings {innings}, player {player_id} "
-                  f"({names[0]}): {len(dupe_rows)} entries, wickets={wickets} -> summed")
+                f"({names[0]}): {len(dupe_rows)} entries, wickets={wickets} -> summed")
         print()
 
-        all_batting_rows = dedupe_keep_first(all_batting_rows)
-        all_bowling_rows = dedupe_sum_bowling(all_bowling_rows)
+        all_batting_rows = dedupe_keep_first(all_batting_rows, "inning_number", "batter_id")
+        all_bowling_rows = dedupe_sum_bowling(all_bowling_rows, "inning_number", "bowler_id")
 
     upsert_rows(supabase, all_batting_rows, all_bowling_rows)
 
@@ -274,12 +317,13 @@ if __name__ == "__main__":
     parser.add_argument("json_path", nargs="?", help="Path to a single scorecard JSON file")
     parser.add_argument("match_id", nargs="?", type=int, help="Match ID for the single file")
     parser.add_argument("--all", action="store_true", help=f"Process every file in {RESPONSES_DIR}/")
+    parser.add_argument("--full", action="store_true", help="Re-upsert every file, ignoring what's already in the DB")
     args = parser.parse_args()
 
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
     if args.all:
-        run_all(client)
+        run_all(client, full=args.full)
     elif args.json_path and args.match_id is not None:
         run_single(client, args.json_path, args.match_id)
     else:

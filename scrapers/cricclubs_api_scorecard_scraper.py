@@ -9,8 +9,12 @@ CLUB_ID = "7605"
 X_API_KEY = "Tan@!75za"            # <-- paste your x-api-key here
 X_CONSUMER_KEY = "Tan#$72za5"  # <-- paste your x-consumer-key here
 
-MATCH_ID_START = 6631
-MATCH_ID_END = 6731  # inclusive
+MATCH_ID_START = 7050
+MATCH_ID_END = 7100  # inclusive
+
+"""
+usage: python cricclubs_api_scorecard_scraper.py
+"""
 
 # RATE LIMIT: 500 requests/day on this key. This range is exactly 500
 # match IDs, so this alone would use the ENTIRE daily quota with nothing

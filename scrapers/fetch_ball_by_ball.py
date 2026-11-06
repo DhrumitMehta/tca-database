@@ -22,8 +22,8 @@ X_CONSUMER_KEY = "Tan#$72za5"    # <-- same key as your scorecard fetcher
 
 OUT_DIR = "responses_ballbyball"
 
-MATCH_ID_START = 2
-MATCH_ID_END = 6635  # inclusive — adjust to your actual known match ID range
+MATCH_ID_START = 5001
+MATCH_ID_END = 5500  # inclusive — adjust to your actual known match ID range
 
 # RATE LIMIT: same 500 requests/day constraint as your scorecard fetcher.
 # This range covers thousands of match IDs, so you will need multiple days

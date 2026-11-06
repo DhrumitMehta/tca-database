@@ -1,9 +1,9 @@
 """
 export_dev_academy_matches.py
 ------------------------------
-Pulls all rows from tca_db_match_info where the series column contains
-"development league" or "academy league" (case-insensitive) AND the
-match_date falls in 2026, then exports them to an Excel file.
+Pulls all rows from tca_db_match_info_v2 where the series_name column contains
+"development league", "academy league", or "TCA U17 LEAGUE" (case-insensitive)
+AND the match_date falls in 2026, then exports them to an Excel file.
 
 Setup:
     pip install supabase python-dotenv openpyxl pandas
@@ -11,6 +11,9 @@ Setup:
 Environment variables (.env or shell):
     SUPABASE_URL
     SUPABASE_KEY
+
+Usage:
+    python export_dev_academy_matches.py
 """
 
 import os
@@ -24,8 +27,8 @@ SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-TABLE = "tca_db_match_info"
-OUTPUT_FILE = "dev_academy_league_matches_2026.xlsx"
+TABLE = "tca_db_match_info_v2"
+OUTPUT_FILE = "tca_census_matches_2026.xlsx"
 PAGE_SIZE = 1000
 
 
@@ -57,10 +60,10 @@ def main():
 
     df = pd.DataFrame(rows)
 
-    # Filter: series contains "development league" or "academy league" (case-insensitive)
-    series_mask = df["series"].str.contains(
-        r"development league|academy league", case=False, na=False, regex=True
-    )
+    SERIES_KEYWORDS = ["development league", "academy league", "tca u17 league"]
+    pattern = "|".join(SERIES_KEYWORDS)
+
+    series_mask = df["series_name"].str.contains(pattern, case=False, na=False, regex=True)
 
     # Filter: match_date is in 2026
     df["match_date"] = pd.to_datetime(df["match_date"], errors="coerce")

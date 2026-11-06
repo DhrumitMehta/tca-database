@@ -1762,7 +1762,7 @@ async function loadReferenceData() {
     });
 
     try {
-      const playerRows = await queryAll('tca_db_player_info', 'select=select=*&order=player_id.asc');
+      const playerRows = await queryAll('tca_db_player_info', 'select=*&order=player_id.asc');
       playerInfoMap = {};
       playerRows.forEach(r => {
         if (r.player_id) playerInfoMap[String(r.player_id)] = r;
@@ -1915,14 +1915,15 @@ function processBatting(dataOverride) {
   const byPlayer = {};
   rows.forEach(row => {
     const id = row.batter_id; if (!id) return;
-    if (!byPlayer[id]) byPlayer[id] = {
-      id, name: row.batter_name,
+    const sid = String(id);
+    if (!byPlayer[sid]) byPlayer[sid] = {
+      id: sid, name: row.batter_name,
       innings: 0, runs: 0, balls: 0,
       fours: 0, sixes: 0, notOuts: 0,
       highScore: 0, highScoreNotOut: false,
       fifties: 0, hundreds: 0
     };
-    const p = byPlayer[id];
+  const p = byPlayer[sid];
     p.innings++;
     p.runs  += row.runs  || 0;
     p.balls += row.balls || 0;
@@ -1970,13 +1971,14 @@ function processBowling(dataOverride) {
   const byPlayer = {};
   rows.forEach(row => {
     const id = row.bowler_id; if (!id) return;
-    if (!byPlayer[id]) byPlayer[id] = {
-      id, name: row.bowler_name,
+    const sid = String(id);
+    if (!byPlayer[sid]) byPlayer[sid] = {
+      id: sid, name: row.bowler_name,
       matches: 0, overs: 0, runs: 0, wickets: 0,
       maidens: 0, wides: 0, noBalls: 0,
       fiveWickets: 0, bestWkts: 0, bestRuns: 999
     };
-    const p = byPlayer[id];
+  const p = byPlayer[sid];
     p.matches++;
     p.overs    += row.overs    || 0;
     p.runs     += row.runs     || 0;
@@ -2614,7 +2616,7 @@ async function syncHistoryFromSupabase() {
   if (!window.supabase.supabaseUrl || !window.supabase.supabaseKey) return;
   try {
     const res = await fetch(
-      `${window.supabase.supabaseUrl}/rest/v1/${window.supabase.supabaseKey}?select=*&order=exported_at.desc&limit=50`,
+      `${window.supabase.supabaseUrl}/rest/v1/${SUPABASE_HISTORY_TABLE}?select=*&order=exported_at.desc&limit=50`,
       { headers: { 'apikey': window.supabase.supabaseKey, 'Authorization': `Bearer ${window.supabase.supabaseKey}` } }
     );
     if (!res.ok) return;

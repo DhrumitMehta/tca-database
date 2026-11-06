@@ -11,9 +11,14 @@ loading/dedup logic, but reshapes the data into the report layout used
 by the "44. Hamisi Work" template.
 
 Usage:
-    python matches_to_excel.py
+    python matches_to_excel.py                       # latest month in data (as before)
+    python matches_to_excel.py --month 2026-10       # October 2026
+    python matches_to_excel.py --month "October 2026"
+    python matches_to_excel.py --list-months         # see what months have data
 """
 
+import argparse
+from datetime import datetime
 import glob
 import json
 import os
@@ -53,6 +58,7 @@ REGION_KEYWORDS = {
     'IRINGA': 'Iringa',
     'PANDAMBILI': 'Pandambili',
     'KOROGWE': 'Korogwe',
+    'SINGIDA': 'Singida',
 }
 
 
@@ -67,7 +73,7 @@ def load_all_matches():
     for path in files:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
-        for match in raw.get("data", []):
+        for match in raw.get("data") or []:
             match_id = match.get("matchId")
             if match_id is None:
                 continue
@@ -80,7 +86,7 @@ def assign_region(venue, tournament_name):
     venue_lower = str(venue).lower()
 
     # 1. Existing specific venue -> region rules take priority
-    if any(x in venue_lower for x in ['annadil burhani', 'leaders', 'gymkhana', 'udsm']):
+    if any(x in venue_lower for x in ['annadil burhani', 'leaders', 'gymkhana', 'udsm', 'indian high school', 'estim, tca cricket arena', 'nts, tca cricket arena']):
         return 'Dar'
     elif 'sua ground' in venue_lower:
         return 'Morogoro'
@@ -88,7 +94,7 @@ def assign_region(venue, tournament_name):
         return 'Tanga'
     elif 'dodoma jiji' in venue_lower:
         return 'Dodoma'
-    elif 'mwanakalenge' in venue_lower:
+    elif 'mwanakalenge' in venue_lower or 'majengo' in venue_lower:
         return 'Bagamoyo'
     elif 'gairo' in venue_lower:
         return 'Gairo'
@@ -109,16 +115,25 @@ def assign_region(venue, tournament_name):
 
     return ' '
 
+def parse_month_arg(value):
+    """Accepts '2026-10', 'October 2026', or 'Oct 2026'. Returns (year, month)."""
+    for fmt in ("%Y-%m", "%B %Y", "%b %Y"):
+        try:
+            d = datetime.strptime(value.strip(), fmt)
+            return d.year, d.month
+        except ValueError:
+            continue
+    raise ValueError(f"Could not understand month {value!r}. Use e.g. 2026-10 or 'October 2026'.")
 
-def build_report_dataframe(matches_by_id):
-    """Reshape raw match dicts (matchId, teamOneName, teamTwoName,
-    matchDate, seriesName, location, ...) into the report columns."""
+
+def build_report_dataframe(matches_by_id, target=None, list_only=False):
+    """target is an optional (year, month) tuple. If None, uses the month of the
+    latest match in the data."""
     rows = []
     for match_id in sorted(matches_by_id.keys()):
         m = matches_by_id[match_id]
         rows.append({
             'dates': m.get('matchDate'),
-            # Prefer seriesName (the tournament), fall back to clubName
             'event_name': m.get('seriesName') or m.get('clubName') or '',
             'venue': m.get('location') or '',
             'first_bat': m.get('teamOneName') or m.get('teamOneCode') or '',
@@ -126,8 +141,6 @@ def build_report_dataframe(matches_by_id):
         })
 
     new_df = pd.DataFrame(rows)
-
-    # Drop rows with no usable date — they can't be placed in a monthly report
     new_df = new_df.dropna(subset=['dates'])
     new_df = new_df[new_df['dates'] != '']
 
@@ -137,10 +150,22 @@ def build_report_dataframe(matches_by_id):
     cleaned_df['DATE'] = pd.to_datetime(cleaned_df['DATE'])
     cleaned_df = cleaned_df.sort_values('DATE').reset_index(drop=True)
 
-    # Use the last available match date to determine which month/year this
-    # report covers, then keep only matches that fall within that month.
-    last_date = cleaned_df['DATE'].max()
-    target_year, target_month = last_date.year, last_date.month
+    # Show which months have data (most recent last)
+    counts = cleaned_df.groupby([cleaned_df['DATE'].dt.year, cleaned_df['DATE'].dt.month]).size()
+    print("Months with matches (most recent last):")
+    for (y, mth), n in counts.tail(12).items():
+        print(f"  {y}-{mth:02d}: {n} matches")
+    if list_only:
+        return None
+
+    if target is None:
+        last_date = cleaned_df['DATE'].max()
+        target_year, target_month = last_date.year, last_date.month
+        print(f"No --month given, using latest month in data: {target_year}-{target_month:02d}")
+    else:
+        target_year, target_month = target
+        print(f"Using requested month: {target_year}-{target_month:02d}")
+
     cleaned_df = cleaned_df[
         (cleaned_df['DATE'].dt.year == target_year) &
         (cleaned_df['DATE'].dt.month == target_month)
@@ -152,14 +177,12 @@ def build_report_dataframe(matches_by_id):
     cleaned_df['REGION'] = cleaned_df.apply(
         lambda row: assign_region(row['VENUE'], row['NAME OF TOURNAMENT']), axis=1
     )
-
     cleaned_df['REMARKS'] = ''
 
     cleaned_df = cleaned_df[[
         'NO.', 'DATE', 'DAY', 'REGION', 'NAME OF TOURNAMENT',
         'TEAM 1', 'TEAM 2', 'VENUE', 'REMARKS'
     ]]
-
     return cleaned_df
 
 
@@ -234,6 +257,15 @@ def write_formatted_excel(cleaned_df):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--month", help="Month to report on, e.g. 2026-10 or 'October 2026'. "
+                                        "Default: latest month in the data.")
+    parser.add_argument("--list-months", action="store_true",
+                        help="Just list months that have matches, then exit.")
+    args = parser.parse_args()
+
+    target = parse_month_arg(args.month) if args.month else None
+
     matches_by_id = load_all_matches()
     if not matches_by_id:
         print("No matches found — check that fetch_get_matches_by_series.py has run "
@@ -242,8 +274,9 @@ def main():
 
     print(f"Total unique matches: {len(matches_by_id)}")
 
-    cleaned_df = build_report_dataframe(matches_by_id)
-    write_formatted_excel(cleaned_df)
+    cleaned_df = build_report_dataframe(matches_by_id, target=target, list_only=args.list_months)
+    if cleaned_df is not None:
+        write_formatted_excel(cleaned_df)
 
 
 if __name__ == "__main__":

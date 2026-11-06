@@ -41,7 +41,18 @@ def load_all_matches():
     for path in files:
         with open(path, "r", encoding="utf-8") as f:
             raw = json.load(f)
-        for match in raw.get("data", []):
+
+        # Guard against empty files, "null" JSON, or "data": null
+        if not isinstance(raw, dict):
+            print(f"  Skipping {os.path.basename(path)}: unexpected content ({type(raw).__name__})")
+            continue
+
+        data = raw.get("data") or []
+        if not data:
+            print(f"  Skipping {os.path.basename(path)}: no matches in 'data'")
+            continue
+
+        for match in data:
             match_id = match.get("matchId")
             if match_id is None:
                 continue
