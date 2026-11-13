@@ -9,16 +9,18 @@ jobs:
   scrape-and-load:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: scrapers   # both scripts run from here, so responses/ resolves correctly
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install requests supabase python-dotenv
 
       - name: Scrape new scorecards
         env:
