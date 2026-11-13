@@ -1,0 +1,35 @@
+name: Daily CricClubs scorecards
+
+on:
+  schedule:
+    - cron: "0 3 * * *"   # 03:00 UTC every day
+  workflow_dispatch:        # lets you run it manually from the Actions tab
+
+jobs:
+  scrape-and-load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Scrape new scorecards
+        env:
+          CRICCLUBS_API_KEY: ${{ secrets.CRICCLUBS_API_KEY }}
+          CRICCLUBS_CONSUMER_KEY: ${{ secrets.CRICCLUBS_CONSUMER_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python cricclubs_api_scorecard_scraper.py
+
+      - name: Load scorecards into Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python scorecard_to_supabase.py --all --full
