@@ -27,7 +27,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests supabase python-dotenv
 
       - name: Check existing data is in the repo
         run: |
@@ -41,6 +41,12 @@ jobs:
           CRICCLUBS_API_KEY: ${{ secrets.CRICCLUBS_API_KEY }}
           CRICCLUBS_CONSUMER_KEY: ${{ secrets.CRICCLUBS_CONSUMER_KEY }}
         run: python fetch_get_matches_by_series.py --budget 150
+
+      - name: Load matches into Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python matches_to_supabase.py
 
       - name: Commit changes
         run: |
