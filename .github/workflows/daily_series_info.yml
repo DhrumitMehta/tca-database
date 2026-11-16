@@ -1,0 +1,35 @@
+name: Daily CricClubs series info
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC every day
+  workflow_dispatch:
+
+concurrency:
+  group: series-info
+  cancel-in-progress: false
+
+jobs:
+  scrape-series-info:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: scrapers
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install requests supabase python-dotenv
+
+      - name: Scrape new series info
+        env:
+          CRICCLUBS_API_KEY: ${{ secrets.CRICCLUBS_API_KEY }}
+          CRICCLUBS_CONSUMER_KEY: ${{ secrets.CRICCLUBS_CONSUMER_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python series_info_scraper_api.py
