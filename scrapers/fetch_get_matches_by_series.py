@@ -37,9 +37,9 @@ import requests
 MATCHES_URL = "https://core-prod-origin.cricclubs.com/core/match/getMatches"
 SERIES_DETAILS_URL = "https://core-prod-origin.cricclubs.com/core/series/getSeriesDetails"
 
-CLUB_ID = "7605"
-X_API_KEY = "Tan@!75za"          # <-- same key as your scorecard fetcher
-X_CONSUMER_KEY = "Tan#$72za5"    # <-- same key as your scorecard fetcher
+CLUB_ID = os.environ.get("CRICCLUBS_CLUB_ID", "7605")
+X_API_KEY = os.environ["CRICCLUBS_API_KEY"]
+X_CONSUMER_KEY = os.environ["CRICCLUBS_CONSUMER_KEY"]
 
 OUT_DIR = "responses_matches"
 
